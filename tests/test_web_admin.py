@@ -108,12 +108,12 @@ def test_full_flow():
     assert resp.status_code == 200
     assert "IVAN IVANOV" in resp.text or "JOHN DOE" in resp.text
 
-    # 7. Upload Paste Accounts: cut after MM, uppercase name
+    # 7. Upload Paste Accounts: cut after MM, uppercase name, DD.MM normalization
     resp = client.post(
         "/accounts/upload-paste",
         data={
             "subcategory_id": 1,
-            "paste_text": "test paste 1, 10/10:extra:data:here\ntest paste 2, 20/20 password"
+            "paste_text": "test paste 1, 10/10:extra:data:here\ntest paste 2, 2024-12-05 password"
         }
     )
     assert resp.status_code == 303
@@ -122,11 +122,13 @@ def test_full_flow():
     assert resp.status_code == 200
     assert "TEST PASTE 1" in resp.text
     assert "TEST PASTE 2" in resp.text
+    assert "10.10" in resp.text
+    assert "05.12" in resp.text
 
-    # 8. Upload ZIP Accounts
+    # 8. Upload ZIP Accounts: supports any date format, normalized to DD.MM
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
-        zf.writestr("test_zip.txt", "zip user 1, 11/11:tail\nzip user 2, 12/12 extra\n")
+        zf.writestr("test_zip.txt", "zip user 1, 11/11:tail\nzip user 2, 12.12 extra\n")
     zip_buf.seek(0)
 
     resp = client.post(
@@ -140,13 +142,15 @@ def test_full_flow():
     assert resp.status_code == 200
     assert "ZIP USER 1" in resp.text
     assert "ZIP USER 2" in resp.text
+    assert "11.11" in resp.text
+    assert "12.12" in resp.text
 
-    # 9. Delete by list
+    # 9. Delete by list: matches DD.MM
     resp = client.post(
         "/accounts/delete-by-list",
         data={
             "subcategory_id": 1,
-            "delete_text": "ZIP USER 1, 11/11\nZIP USER 2, 12/12"
+            "delete_text": "ZIP USER 1, 11.11\nZIP USER 2, 12.12"
         }
     )
     assert resp.status_code == 303

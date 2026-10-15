@@ -183,6 +183,12 @@
             <span>Добавить новую подкатегорию</span>
         </h3>
         <form method="POST" action="/products/subcategories/create" class="space-y-4">
+            {% if not categories %}
+            <div class="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center space-x-2">
+                <i class="fa-solid fa-circle-exclamation text-sm"></i>
+                <span>Сначала создайте категорию (кнопка «+ Категория» вверху), затем добавляйте подкатегории.</span>
+            </div>
+            {% endif %}
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Категория *</label>
                 <select name="category_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -274,7 +280,7 @@
 </div>
 {% endblock %}
 
-{% block extra_scripts %}
+{% block scripts %}
 <script>
     function openEditSubcategoryModal(id, categoryId, name, price, description) {
         document.getElementById('edit-subcategory-form').action = '/products/subcategories/' + id + '/edit';

@@ -175,7 +175,42 @@
                 setTimeout(() => toast.remove(), 300);
             }, 6000);
         }
+
+        // Global Modal Controls
+        function openModal(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+            }
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        // Close on ESC and backdrop click
+        window.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('[id$="-modal"]').forEach(modal => {
+                    modal.classList.add('hidden');
+                });
+                document.body.classList.remove('overflow-hidden');
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('[id$="-modal"]')) {
+                e.target.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        });
     </script>
     {% block scripts %}{% endblock %}
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -36,8 +36,8 @@ async def run_bot_purchase_test():
         acc1 = Account(
             subcategory_id=subcat.id,
             name="JOHN DOE",
-            date_info="15/08",
-            data="JOHN DOE, 15/08"
+            date_info="15.08",
+            data="JOHN DOE, 15.08"
         )
         session.add(acc1)
 

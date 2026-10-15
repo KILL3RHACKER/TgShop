@@ -13,20 +13,62 @@ class ParsedAccount(TypedDict):
     data: str
     raw_data: str
 
+MONTH_NAMES = {
+    "jan": 1, "янв": 1, "feb": 2, "фев": 2, "mar": 3, "мар": 3,
+    "apr": 4, "апр": 4, "may": 5, "май": 5, "мая": 5, "jun": 6, "июн": 6,
+    "jul": 7, "июл": 7, "aug": 8, "авг": 8, "sep": 9, "сен": 9,
+    "oct": 10, "окт": 10, "nov": 11, "ноя": 11, "dec": 12, "дек": 12,
+}
+
+def extract_name_and_date(raw: str) -> tuple[str, str] | None:
+    """
+    Универсальный парсер:
+    - Принимает дату любого формата: DD.MM, DD/MM, DD-MM, DD MM, DD.MM.YYYY, YYYY-MM-DD и др.
+    - Автоматически приводит имя к ВЕРХНЕМУ РЕГИСТРУ (CAPS).
+    - Дата на выходе ВСЕГДА в формате DD.MM (с точкой!).
+    - Все данные/символы после месяца строго отсекаются.
+    """
+    # 1. ISO format: (name)[delimiter](YYYY)[-/. ](MM)[-/. ](DD)
+    m_iso = re.search(r'^(.*?)[,;:\s|]+\s*(?:20\d\d|19\d\d)[\.\/\-\s](\d{1,2})[\.\/\-\s](\d{1,2})', raw)
+    if m_iso:
+        name_raw = m_iso.group(1).strip()
+        month, day = int(m_iso.group(2)), int(m_iso.group(3))
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            clean_name = " ".join(name_raw.split()).upper()
+            return clean_name, f"{day:02d}.{month:02d}"
+
+    # 2. Text month: (name)[delimiter](DD)[-/. ](MonthName)
+    m_text = re.search(r'^(.*?)[,;:\s|]+\s*(\d{1,2})[\.\/\-\s]([A-Za-zА-Яа-яЁё]{3,8})', raw, re.IGNORECASE)
+    if m_text:
+        name_raw = m_text.group(1).strip()
+        day = int(m_text.group(2))
+        m_str = m_text.group(3).lower()[:3]
+        if m_str in MONTH_NAMES and 1 <= day <= 31:
+            clean_name = " ".join(name_raw.split()).upper()
+            return clean_name, f"{day:02d}.{MONTH_NAMES[m_str]:02d}"
+
+    # 3. Standard DD[-/. ]MM with optional [-/. ](YYYY|YY). Extra tokens after date are discarded.
+    m_std = re.search(r'^(.*?)[,;:\s|]+\s*(\d{1,2})[\.\/\-\s](\d{1,2})(?:[\.\/\-\s](?:\d{4}|\d{2}))?(?:\b|[^0-9]|$)', raw)
+    if m_std:
+        name_raw = m_std.group(1).strip()
+        d, m = int(m_std.group(2)), int(m_std.group(3))
+        if 1 <= d <= 31 and 1 <= m <= 12:
+            clean_name = " ".join(name_raw.split()).upper()
+            return clean_name, f"{d:02d}.{m:02d}"
+        elif 1 <= m <= 31 and 1 <= d <= 12:  # Inverted MM/DD
+            clean_name = " ".join(name_raw.split()).upper()
+            return clean_name, f"{m:02d}.{d:02d}"
+
+    return None
+
 def parse_account_line(line: str) -> ParsedAccount | None:
     raw = line.strip()
     if not raw or raw.startswith("#"):
         return None
 
-    # Regex: match Name and DD/MM. Everything after MM is strictly trimmed/cut off!
-    m = re.search(r"^([A-Za-zА-Яа-яЁё0-9_\-\.\s]+?)\s*[,;:\s]\s*(\d{1,2})[/-](\d{1,2})", raw)
-    if m:
-        raw_name = m.group(1).strip()
-        # Автоматически меняем название в Капс NAME SURNAME
-        name = " ".join(raw_name.split()).upper()
-        day = int(m.group(2))
-        month = int(m.group(3))
-        date_info = f"{day:02d}/{month:02d}"
+    extracted = extract_name_and_date(raw)
+    if extracted:
+        name, date_info = extracted
         normalized_data = f"{name}, {date_info}"
         return {
             "name": name,
@@ -139,14 +181,24 @@ async def delete_accounts_by_list(
         if not parsed:
             continue
 
+        dot_date = parsed["date_info"]
+        slash_date = dot_date.replace(".", "/")
+        dash_date = dot_date.replace(".", "-")
+
         conditions = [
             Account.is_sold == False,
             or_(
                 Account.data.ilike(parsed["data"]),
+                Account.data.ilike(f"{parsed['name']}, {slash_date}"),
+                Account.data.ilike(f"{parsed['name']}, {dash_date}"),
                 Account.data.ilike(line),
                 and_(
                     Account.name.ilike(parsed["name"]),
-                    Account.date_info.ilike(parsed["date_info"])
+                    or_(
+                        Account.date_info.ilike(dot_date),
+                        Account.date_info.ilike(slash_date),
+                        Account.date_info.ilike(dash_date),
+                    )
                 ) if parsed["date_info"] != "N/A" else Account.name.ilike(parsed["name"])
             )
         ]

@@ -69,9 +69,9 @@ class Account(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id", ondelete="CASCADE"), index=True)
-    data: Mapped[str] = mapped_column(Text)  # Format: "NAME SURNAME, DD/MM"
+    data: Mapped[str] = mapped_column(Text)  # Format: "NAME SURNAME, DD.MM"
     name: Mapped[str] = mapped_column(String(128), index=True)  # Format: "NAME SURNAME"
-    date_info: Mapped[str] = mapped_column(String(32), index=True)  # Format: "DD/MM"
+    date_info: Mapped[str] = mapped_column(String(32), index=True)  # Format: "DD.MM"
     raw_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     is_sold: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
