@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Тикеты пополнения{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
+                <i class="fa-solid fa-ticket text-indigo-400"></i>
+                <span>Тикеты на пополнение USDT</span>
+            </h2>
+            <p class="text-sm text-slate-400 mt-0.5">Проверка и подтверждение заявок на пополнение баланса</p>
+        </div>
+
+        <!-- Filter Status Pills -->
+        <div class="flex items-center space-x-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl">
+            <a href="/tickets" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors {% if status_filter == 'all' %}bg-indigo-600 text-white shadow{% else %}text-slate-400 hover:text-white{% endif %}">
+                Все
+            </a>
+            <a href="/tickets?status_filter=pending" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors {% if status_filter == 'pending' %}bg-amber-600 text-white shadow{% else %}text-slate-400 hover:text-white{% endif %}">
+                Ожидают
+            </a>
+            <a href="/tickets?status_filter=approved" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors {% if status_filter == 'approved' %}bg-emerald-600 text-white shadow{% else %}text-slate-400 hover:text-white{% endif %}">
+                Одобрены
+            </a>
+            <a href="/tickets?status_filter=rejected" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors {% if status_filter == 'rejected' %}bg-rose-600 text-white shadow{% else %}text-slate-400 hover:text-white{% endif %}">
+                Отклонены
+            </a>
+        </div>
+    </div>
+
+    <!-- Tickets Table -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 bg-slate-950/50">
+                        <th class="py-3 px-4"># ID</th>
+                        <th class="py-3 px-4">Пользователь</th>
+                        <th class="py-3 px-4">Tron Адрес</th>
+                        <th class="py-3 px-4">Сумма (USDT)</th>
+                        <th class="py-3 px-4">Статус</th>
+                        <th class="py-3 px-4">Создан</th>
+                        <th class="py-3 px-4">Истекает</th>
+                        <th class="py-3 px-4 text-right">Действия</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60 text-slate-300">
+                    {% if tickets %}
+                        {% for ticket in tickets %}
+                        {% set u = users_map.get(ticket.user_id) %}
+                        <tr class="hover:bg-slate-800/40 transition-colors">
+                            <td class="py-3.5 px-4 font-mono text-xs font-bold text-white">#{{ ticket.id }}</td>
+                            <td class="py-3.5 px-4">
+                                <div class="flex flex-col">
+                                    <span class="font-mono text-xs text-indigo-400">
+                                        <a href="/users?q={{ ticket.user_id }}" class="hover:underline">{{ ticket.user_id }}</a>
+                                    </span>
+                                    {% if u and u.username %}
+                                    <span class="text-xs text-slate-400">@{{ u.username }}</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                {% if u and u.tron_address %}
+                                <span class="font-mono text-xs text-slate-400 bg-slate-950 px-2 py-1 rounded border border-slate-800 select-all" title="{{ u.tron_address }}">
+                                    {{ u.tron_address[:8] }}...{{ u.tron_address[-6:] }}
+                                </span>
+                                {% else %}
+                                <span class="text-slate-600 text-xs">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 font-semibold text-emerald-400 text-base">
+                                {{ ticket.amount | currency }}
+                            </td>
+                            <td class="py-3.5 px-4 text-xs">
+                                {% if ticket.status.value == 'pending' %}
+                                <span class="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold inline-flex items-center space-x-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                                    <span>Ожидает</span>
+                                </span>
+                                {% elif ticket.status.value == 'approved' %}
+                                <span class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold">
+                                    Одобрен
+                                </span>
+                                {% elif ticket.status.value == 'rejected' %}
+                                <span class="px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/25 font-semibold">
+                                    Отклонен
+                                </span>
+                                {% else %}
+                                <span class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-semibold">
+                                    Истек
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 text-xs text-slate-400">
+                                {{ ticket.created_at | dt }}
+                            </td>
+                            <td class="py-3.5 px-4 text-xs text-slate-500">
+                                {{ ticket.expires_at | dt }}
+                            </td>
+                            <td class="py-3.5 px-4 text-right">
+                                {% if ticket.status.value == 'pending' %}
+                                <div class="inline-flex items-center space-x-1.5">
+                                    <form method="POST" action="/tickets/{{ ticket.id }}/approve" class="inline">
+                                        <button type="submit" onclick="return confirm('Подтвердить пополнение на ${{ "%.2f"|format(ticket.amount) }}? Баланс пользователя и реферала будут обновлены!')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center space-x-1">
+                                            <i class="fa-solid fa-check"></i>
+                                            <span>Одобрить</span>
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="/tickets/{{ ticket.id }}/reject" class="inline">
+                                        <button type="submit" onclick="return confirm('Отклонить данный тикет?')" class="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1">
+                                            <i class="fa-solid fa-xmark"></i>
+                                            <span>Отклонить</span>
+                                        </button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <span class="text-xs text-slate-500 italic">Обработан</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="py-12 text-center text-slate-500 text-sm">
+                                Тикетов по выбранному фильтру не найдено
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

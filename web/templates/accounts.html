@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+
+{% block title %}Управление аккаунтами{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header & Action Buttons -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
+                <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
+                <span>Склад аккаунтов</span>
+            </h2>
+            <p class="text-sm text-slate-400 mt-0.5">Управление инвентарем: пакетная загрузка ZIP, вставка списком и удаление</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Button: Upload ZIP -->
+            <button onclick="openModal('zip-modal')" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
+                <i class="fa-solid fa-file-zipper"></i>
+                <span>Загрузить ZIP</span>
+            </button>
+
+            <!-- Button: Paste Accounts -->
+            <button onclick="openModal('paste-modal')" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-emerald-600/25 transition-all">
+                <i class="fa-solid fa-paste"></i>
+                <span>Вставить списком</span>
+            </button>
+
+            <!-- Button: Delete by List -->
+            <button onclick="openModal('delete-list-modal')" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-sm font-medium rounded-xl transition-all">
+                <i class="fa-solid fa-trash-can"></i>
+                <span>Удалить по списку</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Inventory Stat Counters -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+            <div>
+                <p class="text-xs uppercase font-semibold text-slate-400">Всего в базе</p>
+                <p class="text-xl font-bold text-white mt-1">{{ total_all }} шт.</p>
+            </div>
+            <span class="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
+                <i class="fa-solid fa-database"></i>
+            </span>
+        </div>
+        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+            <div>
+                <p class="text-xs uppercase font-semibold text-emerald-400">В наличии (Свободно)</p>
+                <p class="text-xl font-bold text-emerald-400 mt-1">{{ total_available }} шт.</p>
+            </div>
+            <span class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                <i class="fa-solid fa-circle-check"></i>
+            </span>
+        </div>
+        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+            <div>
+                <p class="text-xs uppercase font-semibold text-purple-400">Продано покупателям</p>
+                <p class="text-xl font-bold text-purple-400 mt-1">{{ total_sold }} шт.</p>
+            </div>
+            <span class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                <i class="fa-solid fa-bag-shopping"></i>
+            </span>
+        </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+        <form method="GET" action="/accounts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <!-- Search Query -->
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
+                    <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                </span>
+                <input type="text" name="q" value="{{ q }}" placeholder="Поиск (Имя, Дата, Данные)..."
+                    class="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <!-- Product Filter -->
+            <div>
+                <select name="product_id" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">Все товары</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}" {% if selected_product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Status Filter -->
+            <div>
+                <select name="status_filter" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Все статусы</option>
+                    <option value="available" {% if status_filter == 'available' %}selected{% endif %}>Только в наличии</option>
+                    <option value="sold" {% if status_filter == 'sold' %}selected{% endif %}>Только проданные</option>
+                </select>
+            </div>
+
+            <!-- Submit / Reset Buttons -->
+            <div class="flex items-center space-x-2">
+                <button type="submit" class="flex-1 py-2 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium border border-slate-700 transition-colors flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-filter text-xs"></i>
+                    <span>Фильтровать</span>
+                </button>
+                <a href="/accounts" title="Сбросить" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl border border-slate-700 text-sm">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Bulk Action Bar (Visible when checkboxes are selected) -->
+    <form id="bulk-delete-form" method="POST" action="/accounts/delete-selected">
+        {% if selected_product_id %}
+        <input type="hidden" name="product_id" value="{{ selected_product_id }}">
+        {% endif %}
+
+        <div id="bulk-actions" class="hidden mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 flex items-center justify-between">
+            <div class="flex items-center space-x-3 text-rose-200 text-sm font-medium">
+                <i class="fa-solid fa-check-double text-rose-400"></i>
+                <span>Выбрано элементов: <b id="selected-count">0</b></span>
+            </div>
+            <button type="submit" onclick="return confirm('Вы действительно хотите удалить выбранные аккаунты?')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg shadow transition-colors flex items-center space-x-1.5">
+                <i class="fa-solid fa-trash"></i>
+                <span>Удалить выбранные</span>
+            </button>
+        </div>
+
+        <!-- Table Listing Accounts -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 bg-slate-950/50">
+                            <th class="py-3 px-3 w-8 text-center">
+                                <input type="checkbox" id="select-all" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer">
+                            </th>
+                            <th class="py-3 px-3">ID</th>
+                            <th class="py-3 px-3">Товар</th>
+                            <th class="py-3 px-3">Имя Фамилия</th>
+                            <th class="py-3 px-3">Дата (DD/MM)</th>
+                            <th class="py-3 px-3">Статус</th>
+                            <th class="py-3 px-3">Покупатель</th>
+                            <th class="py-3 px-3">Добавлен</th>
+                            <th class="py-3 px-3 text-right">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60 text-slate-300">
+                        {% if accounts %}
+                            {% for acc in accounts %}
+                            <tr class="hover:bg-slate-800/40 transition-colors">
+                                <td class="py-3 px-3 text-center">
+                                    <input type="checkbox" name="selected_ids" value="{{ acc.id }}" class="account-checkbox rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer">
+                                </td>
+                                <td class="py-3 px-3 font-mono text-xs text-slate-500">#{{ acc.id }}</td>
+                                <td class="py-3 px-3 font-medium text-white">
+                                    <span class="inline-block px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-xs border border-slate-700">
+                                        {{ acc.product.name if acc.product else 'Товар #' ~ acc.product_id }}
+                                    </span>
+                                </td>
+                                <td class="py-3 px-3 font-semibold text-slate-100">
+                                    {{ acc.name }}
+                                </td>
+                                <td class="py-3 px-3 font-mono text-xs text-slate-400">
+                                    {{ acc.date_info }}
+                                </td>
+                                <td class="py-3 px-3 text-xs">
+                                    {% if acc.is_sold %}
+                                    <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium">
+                                        Продан
+                                    </span>
+                                    {% else %}
+                                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold">
+                                        Доступен
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-3 text-xs font-mono">
+                                    {% if acc.sold_to_user_id %}
+                                    <a href="/users?q={{ acc.sold_to_user_id }}" class="text-indigo-400 hover:underline">
+                                        {{ acc.sold_to_user_id }}
+                                    </a>
+                                    {% else %}
+                                    <span class="text-slate-600">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-3 text-xs text-slate-400">
+                                    {{ acc.created_at | dt }}
+                                </td>
+                                <td class="py-3 px-3 text-right">
+                                    <button type="button" onclick="deleteSingleAccount({{ acc.id }})" title="Удалить" class="text-slate-500 hover:text-rose-400 p-1 transition-colors">
+                                        <i class="fa-solid fa-trash-can text-sm"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="py-8 text-center text-slate-500 text-sm">
+                                    Аккаунтов не найдено. Воспользуйтесь кнопками выше для загрузки.
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            {% if total_pages > 1 %}
+            <div class="p-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span>Страница <b>{{ page }}</b> из <b>{{ total_pages }}</b> (Всего: {{ total_matching }})</span>
+                <div class="flex items-center space-x-1.5">
+                    {% if page > 1 %}
+                    <a href="/accounts?page={{ page - 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&status_filter={{ status_filter }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
+                        &larr; Назад
+                    </a>
+                    {% endif %}
+                    {% if page < total_pages %}
+                    <a href="/accounts?page={{ page + 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&status_filter={{ status_filter }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
+                        Вперед &rarr;
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<!-- ================= MODAL: ZIP UPLOAD ================= -->
+<div id="zip-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+        <button onclick="closeModal('zip-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-1">
+            <i class="fa-solid fa-file-zipper text-indigo-400"></i>
+            <span>Пакетная загрузка через ZIP</span>
+        </h3>
+        <p class="text-xs text-slate-400 mb-4">Архив может содержать один или несколько .txt файлов со строками формата <code>NAME SURNAME, DD/MM</code>.</p>
+
+        <form method="POST" action="/accounts/upload-zip" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Целевой товар *</label>
+                <select name="product_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="" disabled selected>Выберите товар...</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.name }} (${{ "%.2f"|format(p.price) }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Файл архива (.zip) *</label>
+                <input type="file" name="zip_file" accept=".zip" required
+                    class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
+            </div>
+
+            <div class="pt-2 flex justify-end space-x-2">
+                <button type="button" onclick="closeModal('zip-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+                    Отмена
+                </button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
+                    Распаковать и добавить
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ================= MODAL: PASTE ACCOUNTS ================= -->
+<div id="paste-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+        <button onclick="closeModal('paste-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-1">
+            <i class="fa-solid fa-paste text-emerald-400"></i>
+            <span>Добавление аккаунтов списком</span>
+        </h3>
+        <p class="text-xs text-slate-400 mb-4">Вставьте список строк. Формат каждой строки: <code>NAME SURNAME, DD/MM</code> (один аккаунт на строку).</p>
+
+        <form method="POST" action="/accounts/upload-paste" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Целевой товар *</label>
+                <select name="product_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="" disabled selected>Выберите товар...</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.name }} (${{ "%.2f"|format(p.price) }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Строки аккаунтов *</label>
+                <textarea name="paste_text" rows="8" required placeholder="IVAN PETROV, 15/08&#10;ALEX SMITH, 22/11&#10;JOHN DOE, 03/05"
+                    class="w-full p-3 font-mono text-xs rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+            </div>
+
+            <div class="pt-2 flex justify-end space-x-2">
+                <button type="button" onclick="closeModal('paste-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+                    Отмена
+                </button>
+                <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-emerald-600/30">
+                    Добавить в базу
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ================= MODAL: DELETE BY LIST ================= -->
+<div id="delete-list-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+        <button onclick="closeModal('delete-list-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-1">
+            <i class="fa-solid fa-trash-can text-rose-400"></i>
+            <span>Удаление по списку</span>
+        </h3>
+        <p class="text-xs text-slate-400 mb-4">Вставьте список аккаунтов (по одному на строку). Будут удалены только еще не проданные аккаунты, совпадающие со списком.</p>
+
+        <form method="POST" action="/accounts/delete-by-list" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Фильтр по товару (необязательно)</label>
+                <select name="product_id" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-rose-500">
+                    <option value="">Все товары</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Список для удаления *</label>
+                <textarea name="delete_text" rows="8" required placeholder="IVAN PETROV, 15/08&#10;ALEX SMITH, 22/11"
+                    class="w-full p-3 font-mono text-xs rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500"></textarea>
+            </div>
+
+            <div class="pt-2 flex justify-end space-x-2">
+                <button type="button" onclick="closeModal('delete-list-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+                    Отмена
+                </button>
+                <button type="submit" onclick="return confirm('Вы уверены, что хотите удалить совпадающие аккаунты?')" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-rose-600/30">
+                    Найти и удалить
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Hidden Single Delete Form -->
+<form id="single-delete-form" method="POST" action="" class="hidden">
+    {% if selected_product_id %}
+    <input type="hidden" name="product_id" value="{{ selected_product_id }}">
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openModal(id) {
+        document.getElementById(id).classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).classList.add('hidden');
+    }
+
+    function deleteSingleAccount(id) {
+        if (confirm('Вы уверены, что хотите удалить этот аккаунт?')) {
+            const form = document.getElementById('single-delete-form');
+            form.action = '/accounts/' + id + '/delete';
+            form.submit();
+        }
+    }
+
+    // Bulk selection handler
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.account-checkbox');
+    const bulkBar = document.getElementById('bulk-actions');
+    const selectedCount = document.getElementById('selected-count');
+
+    function updateBulkBar() {
+        const checked = document.querySelectorAll('.account-checkbox:checked');
+        if (checked.length > 0) {
+            bulkBar.classList.remove('hidden');
+            selectedCount.textContent = checked.length;
+        } else {
+            bulkBar.classList.add('hidden');
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', () => {
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateBulkBar();
+        });
+    }
+
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', () => {
+            updateBulkBar();
+            if (!cb.checked && selectAll) selectAll.checked = false;
+        });
+    });
+</script>
+{% endblock %}

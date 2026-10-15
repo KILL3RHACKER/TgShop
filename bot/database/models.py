@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -14,6 +14,9 @@ class TicketStatus(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("tg_id", name="uq_users_tg_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     tg_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
@@ -50,6 +53,26 @@ class Product(Base):
     content: Mapped[str] = mapped_column(Text)
 
     category: Mapped["Category"] = relationship(back_populates="products", lazy="selectin")
+    accounts: Mapped[list["Account"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    data: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(String(128), index=True)
+    date_info: Mapped[str] = mapped_column(String(32), index=True)
+    is_sold: Mapped[bool] = mapped_column(default=False, index=True)
+    sold_to_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.tg_id"), nullable=True)
+    sold_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    product: Mapped["Product"] = relationship(back_populates="accounts")
 
 class TopUpTicket(Base):
     __tablename__ = "topup_tickets"

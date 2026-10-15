@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from bot.database.models import Category, Product
+from bot.database.models import Category, Product, Account
 
 async def seed_data(session: AsyncSession) -> None:
     result = await session.execute(select(Category))
@@ -35,4 +35,15 @@ async def seed_data(session: AsyncSession) -> None:
     )
 
     session.add_all([prod1, prod2, prod3])
+    await session.flush()
+
+    sample_accounts = [
+        Account(product_id=prod1.id, data="JOHN DOE, 15/08", name="JOHN DOE", date_info="15/08"),
+        Account(product_id=prod1.id, data="ALICE SMITH, 22/11", name="ALICE SMITH", date_info="22/11"),
+        Account(product_id=prod1.id, data="MICHAEL BROWN, 04/05", name="MICHAEL BROWN", date_info="04/05"),
+        Account(product_id=prod2.id, data="DAVID WILSON, 12/03", name="DAVID WILSON", date_info="12/03"),
+        Account(product_id=prod2.id, data="EMMA JOHNSON, 30/09", name="EMMA JOHNSON", date_info="30/09"),
+        Account(product_id=prod3.id, data="OLIVIA DAVIS, 19/07", name="OLIVIA DAVIS", date_info="19/07"),
+    ]
+    session.add_all(sample_accounts)
     await session.commit()

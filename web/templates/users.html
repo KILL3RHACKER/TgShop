@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Пользователи{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
+                <i class="fa-solid fa-users text-indigo-400"></i>
+                <span>Пользователи магазина</span>
+            </h2>
+            <p class="text-sm text-slate-400 mt-0.5">База клиентов бота, балансы, реферальные связи и Tron-кошельки</p>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2">
+                <span class="text-xs text-slate-400">Всего балансов клиентов: </span>
+                <span class="text-sm font-bold text-emerald-400">{{ total_balance | currency }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+        <form method="GET" action="/users" class="flex flex-col sm:flex-row gap-3">
+            <div class="relative flex-1">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
+                    <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                </span>
+                <input type="text" name="q" value="{{ q }}" placeholder="Поиск по Telegram ID, Username (@user) или Tron адресу..."
+                    class="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div class="flex items-center space-x-2">
+                <button type="submit" class="py-2 px-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium shadow-md shadow-indigo-600/20 transition-colors">
+                    Поиск
+                </button>
+                <a href="/users" title="Сбросить" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl border border-slate-700 text-sm">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Users Table -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 bg-slate-950/50">
+                        <th class="py-3 px-4"># ID</th>
+                        <th class="py-3 px-4">Telegram ID</th>
+                        <th class="py-3 px-4">Username</th>
+                        <th class="py-3 px-4">Баланс ($)</th>
+                        <th class="py-3 px-4">Реферер (ID)</th>
+                        <th class="py-3 px-4">Tron Кошелек</th>
+                        <th class="py-3 px-4">Дата регистрации</th>
+                        <th class="py-3 px-4 text-right">Действия</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60 text-slate-300">
+                    {% if users %}
+                        {% for user in users %}
+                        <tr class="hover:bg-slate-800/40 transition-colors">
+                            <td class="py-3.5 px-4 font-mono text-xs text-slate-500">#{{ user.id }}</td>
+                            <td class="py-3.5 px-4 font-mono font-bold text-white text-xs">
+                                <code>{{ user.tg_id }}</code>
+                            </td>
+                            <td class="py-3.5 px-4 text-xs">
+                                {% if user.username %}
+                                <a href="https://t.me/{{ user.username }}" target="_blank" class="text-indigo-400 hover:underline">
+                                    @{{ user.username }}
+                                </a>
+                                {% else %}
+                                <span class="text-slate-500">Без юзернейма</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 font-semibold text-emerald-400 text-sm">
+                                {{ user.balance | currency }}
+                            </td>
+                            <td class="py-3.5 px-4 text-xs font-mono">
+                                {% if user.referrer_id %}
+                                <a href="/users?q={{ user.referrer_id }}" class="text-slate-300 hover:text-indigo-400 underline">
+                                    {{ user.referrer_id }}
+                                </a>
+                                {% else %}
+                                <span class="text-slate-600">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 text-xs">
+                                {% if user.tron_address %}
+                                <span class="font-mono text-slate-400 bg-slate-950 px-2 py-1 rounded border border-slate-800 select-all" title="{{ user.tron_address }}">
+                                    {{ user.tron_address[:8] }}...{{ user.tron_address[-6:] }}
+                                </span>
+                                {% else %}
+                                <span class="text-slate-600">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 text-xs text-slate-400">
+                                {{ user.created_at | dt }}
+                            </td>
+                            <td class="py-3.5 px-4 text-right">
+                                <button type="button"
+                                    onclick="openBalanceModal({{ user.tg_id }}, {{ user.balance }})"
+                                    title="Изменить баланс"
+                                    class="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-lg text-xs font-medium transition-colors inline-flex items-center space-x-1">
+                                    <i class="fa-solid fa-coins"></i>
+                                    <span>Баланс</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="py-12 text-center text-slate-500 text-sm">
+                                Пользователей не найдено
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination Bar -->
+        {% if total_pages > 1 %}
+        <div class="p-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <span>Страница <b>{{ page }}</b> из <b>{{ total_pages }}</b> (Всего: {{ total_matching }})</span>
+            <div class="flex items-center space-x-1.5">
+                {% if page > 1 %}
+                <a href="/users?page={{ page - 1 }}&q={{ q }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
+                    &larr; Назад
+                </a>
+                {% endif %}
+                {% if page < total_pages %}
+                <a href="/users?page={{ page + 1 }}&q={{ q }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
+                    Вперед &rarr;
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ================= MODAL: ADJUST BALANCE ================= -->
+<div id="balance-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
+        <button onclick="closeModal('balance-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+        <h3 class="text-lg font-bold text-white mb-2 flex items-center space-x-2">
+            <i class="fa-solid fa-wallet text-indigo-400"></i>
+            <span>Баланс пользователя</span>
+        </h3>
+        <p class="text-xs text-slate-400 mb-4">Изменение счета клиента <code id="balance-user-tg" class="text-indigo-400 font-bold"></code></p>
+
+        <form id="balance-form" method="POST" action="" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Операция</label>
+                <select name="action" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="add">Начислить к текущему (+)</option>
+                    <option value="set">Установить точную сумму (=)</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Сумма ($)</label>
+                <input type="number" step="0.01" min="0" name="amount" required placeholder="10.00"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="pt-2 flex justify-end space-x-2">
+                <button type="button" onclick="closeModal('balance-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+                    Отмена
+                </button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
+                    Применить
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openModal(id) {
+        document.getElementById(id).classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).classList.add('hidden');
+    }
+
+    function openBalanceModal(tgId, currentBalance) {
+        document.getElementById('balance-user-tg').textContent = tgId;
+        document.getElementById('balance-form').action = '/users/' + tgId + '/adjust-balance';
+        openModal('balance-modal');
+    }
+</script>
+{% endblock %}

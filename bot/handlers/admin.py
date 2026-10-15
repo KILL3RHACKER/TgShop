@@ -7,6 +7,7 @@ from sqlalchemy import select, func
 from bot.config import config
 from bot.database.models import User, TopUpTicket, TicketStatus, Category, Product
 from bot.keyboards.callbacks import TicketActionCD
+from bot.services.ticket import approve_ticket, reject_ticket
 
 admin_router = Router()
 
@@ -109,56 +110,15 @@ async def process_ticket_action(
         return
 
     await callback.answer()
-    ticket = await session.get(TopUpTicket, callback_data.id)
-
-    if not ticket or ticket.status != TicketStatus.PENDING:
-        await callback.message.edit_text(
-            f"Тикет #{callback_data.id} уже обработан или срок его действия истек."
-        )
-        return
-
-    user = await session.scalar(select(User).where(User.tg_id == ticket.user_id))
-
     if callback_data.action == "approve":
-        ticket.status = TicketStatus.APPROVED
-        user.balance = float(user.balance) + float(ticket.amount)
-
-        # Реферальное отчисление
-        if user.referrer_id:
-            referrer = await session.scalar(select(User).where(User.tg_id == user.referrer_id))
-            if referrer:
-                bonus = float(ticket.amount) * (config.referral_percent / 100.0)
-                referrer.balance = float(referrer.balance) + bonus
-                try:
-                    await bot.send_message(
-                        referrer.tg_id,
-                        f"🎁 <b>Реферальное вознаграждение!</b>\n"
-                        f"Вам начислено <b>${bonus:.2f}</b> ({config.referral_percent}%) от пополнения реферала."
-                    )
-                except Exception:
-                    pass
-
-        await session.commit()
-        await callback.message.edit_text(
-            f"✅ <b>Тикет #{ticket.id} успешно подтвержден!</b>\n"
-            f"Баланс пользователя пополнен на ${ticket.amount:.2f}."
-        )
-        try:
-            await bot.send_message(
-                ticket.user_id,
-                f"✅ <b>Ваш баланс успешно пополнен на ${ticket.amount:.2f} USDT!</b>"
-            )
-        except Exception:
-            pass
-
+        success, msg = await approve_ticket(session, callback_data.id, bot=bot)
+        if success:
+            await callback.message.edit_text(f"✅ <b>{msg}</b>")
+        else:
+            await callback.message.edit_text(f"⚠️ {msg}")
     elif callback_data.action == "reject":
-        ticket.status = TicketStatus.REJECTED
-        await session.commit()
-        await callback.message.edit_text(f"❌ <b>Тикет #{ticket.id} отклонен.</b>")
-        try:
-            await bot.send_message(
-                ticket.user_id,
-                f"❌ <b>Ваш тикет на пополнение #{ticket.id} был отклонен администратором.</b>"
-            )
-        except Exception:
-            pass
+        success, msg = await reject_ticket(session, callback_data.id, bot=bot)
+        if success:
+            await callback.message.edit_text(f"❌ <b>{msg}</b>")
+        else:
+            await callback.message.edit_text(f"⚠️ {msg}")

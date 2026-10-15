@@ -20,17 +20,26 @@ def get_categories_kb(categories: list[Category]) -> InlineKeyboardMarkup:
     builder.adjust(1)
     return builder.as_markup()
 
-def get_products_kb(products: list[Product], category_id: int) -> InlineKeyboardMarkup:
+def get_products_kb(products: list[Product], category_id: int, counts: dict[int, int] | None = None) -> InlineKeyboardMarkup:
+    counts = counts or {}
     builder = InlineKeyboardBuilder()
     for prod in products:
-        builder.button(text=f"{prod.name} — ${prod.price:.2f}", callback_data=ProductCD(id=prod.id))
+        count = counts.get(prod.id, 0)
+        if count > 0:
+            text = f"{prod.name} ({count} шт.) — ${prod.price:.2f}"
+        else:
+            text = f"{prod.name} (Нет в наличии) — ${prod.price:.2f}"
+        builder.button(text=text, callback_data=ProductCD(id=prod.id))
     builder.button(text="◀️ Назад к категориям", callback_data="catalog")
     builder.adjust(1)
     return builder.as_markup()
 
-def get_product_card_kb(product: Product) -> InlineKeyboardMarkup:
+def get_product_card_kb(product: Product, in_stock: bool = True) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text=f"💳 Купить за ${product.price:.2f}", callback_data=BuyProductCD(id=product.id))
+    if in_stock:
+        builder.button(text=f"💳 Купить за ${product.price:.2f}", callback_data=BuyProductCD(id=product.id))
+    else:
+        builder.button(text="❌ Нет в наличии", callback_data="out_of_stock")
     builder.button(text="◀️ Назад к товарам", callback_data=CategoryCD(id=product.category_id))
     builder.adjust(1)
     return builder.as_markup()

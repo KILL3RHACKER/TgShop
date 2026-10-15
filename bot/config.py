@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     referral_percent: float = 5.0
     ticket_expire_minutes: int = 15
+    admin_web_user: str = "admin"
+    admin_web_password: str = "admin123"
+    web_secret_key: str = "tg-shop-bot-super-secret-key-admin"
 
     model_config = SettingsConfigDict(
         env_file=".env",
