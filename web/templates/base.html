@@ -99,6 +99,11 @@
                 <span>Товары и Категории</span>
             </a>
 
+            <a href="/orders" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all {% if active_tab == 'orders' %}bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/60{% endif %}">
+                <i class="fa-solid fa-scale-balanced w-5 text-center text-base"></i>
+                <span>Заказы и Диспуты</span>
+            </a>
+
             <a href="/users" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all {% if active_tab == 'users' %}bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/60{% endif %}">
                 <i class="fa-solid fa-users w-5 text-center text-base"></i>
                 <span>Пользователи</span>

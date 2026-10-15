@@ -1,25 +1,50 @@
 import asyncio
 import logging
+from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage
+from sqlalchemy import select
 
 from bot.config import config
 from bot.database.base import init_db, async_session
 from bot.database.seed import seed_data
+from bot.database.models import Order, OrderStatus
 from bot.middlewares.db import DbSessionMiddleware
 from bot.handlers.common import common_router
 from bot.handlers.catalog import catalog_router
 from bot.handlers.profile import profile_router
 from bot.handlers.topup import topup_router
 from bot.handlers.admin import admin_router
+from bot.handlers.disputes import disputes_router
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+async def hold_release_worker(session_pool) -> None:
+    """Фоновый воркер: авто-разморозка заказов, у которых истек 24-часовой холд без открытия спора."""
+    while True:
+        try:
+            await asyncio.sleep(60)
+            async with session_pool() as session:
+                now = datetime.utcnow()
+                stmt = select(Order).where(Order.status == OrderStatus.HOLD, Order.hold_until <= now)
+                res = await session.execute(stmt)
+                expired_orders = list(res.scalars().all())
+                for order in expired_orders:
+                    order.status = OrderStatus.COMPLETED
+                    order.resolved_at = now
+                if expired_orders:
+                    await session.commit()
+                    logger.info(f"Released 24h hold for {len(expired_orders)} completed orders.")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error in hold_release_worker: {e}")
 
 async def main() -> None:
     # Инициализация БД и сид данных
@@ -45,14 +70,19 @@ async def main() -> None:
         catalog_router,
         profile_router,
         topup_router,
-        admin_router
+        admin_router,
+        disputes_router
     )
+
+    # Фоновая задача разморозки 24ч холда
+    worker_task = asyncio.create_task(hold_release_worker(async_session))
 
     logger.info("Bot starting...")
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
     finally:
+        worker_task.cancel()
         await bot.session.close()
         logger.info("Bot stopped.")
 

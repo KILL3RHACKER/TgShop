@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import Category, Product, Account
+from bot.database.models import Category, Subcategory, Account
 from web.auth import AdminUser
 from web.dependencies import get_db
 
@@ -25,22 +25,22 @@ async def list_products(
     categories_res = await session.execute(select(Category).order_by(Category.name))
     categories = list(categories_res.scalars().all())
 
-    products_res = await session.execute(select(Product).order_by(Product.name))
-    products = list(products_res.scalars().all())
+    subcategories_res = await session.execute(select(Subcategory).order_by(Subcategory.name))
+    subcategories = list(subcategories_res.scalars().all())
 
-    # Get stock counts
+    # Stock counts per subcategory
     counts_res = await session.execute(
-        select(Account.product_id, func.count(Account.id))
+        select(Account.subcategory_id, func.count(Account.id))
         .where(Account.is_sold == False)
-        .group_by(Account.product_id)
+        .group_by(Account.subcategory_id)
     )
     stock_counts = dict(counts_res.all())
 
-    # Get sold counts
+    # Sold counts per subcategory
     sold_counts_res = await session.execute(
-        select(Account.product_id, func.count(Account.id))
+        select(Account.subcategory_id, func.count(Account.id))
         .where(Account.is_sold == True)
-        .group_by(Account.product_id)
+        .group_by(Account.subcategory_id)
     )
     sold_counts = dict(sold_counts_res.all())
 
@@ -52,7 +52,8 @@ async def list_products(
             "admin": admin,
             "active_tab": "products",
             "categories": categories,
-            "products": products,
+            "subcategories": subcategories,
+            "products": subcategories,  # Alias for template compatibility
             "stock_counts": stock_counts,
             "sold_counts": sold_counts,
             "msg": msg,
@@ -93,77 +94,76 @@ async def delete_category(
     await session.delete(category)
     await session.commit()
 
-    msg = quote(f"Категория «{name}» и связанные товары удалены")
+    msg = quote(f"Категория «{name}» и связанные подкатегории удалены")
     return RedirectResponse(url=f"/products?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.post("/create")
-async def create_product(
+@router.post("/subcategories/create")
+async def create_subcategory(
     admin: AdminUser,
     category_id: int = Form(...),
     name: str = Form(...),
     price: float = Form(...),
     description: str = Form(""),
-    content: str = Form(""),
     session: AsyncSession = Depends(get_db),
 ):
     clean_name = name.strip()
     if not clean_name:
-        msg = quote("Название товара не может быть пустым")
+        msg = quote("Название подкатегории не может быть пустым")
         return RedirectResponse(url=f"/products?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
-    product = Product(
+    subcat = Subcategory(
         category_id=category_id,
         name=clean_name,
         price=price,
         description=description.strip(),
-        content=content.strip(),
     )
-    session.add(product)
+    session.add(subcat)
     await session.commit()
 
-    msg = quote(f"Товар «{clean_name}» успешно добавлен")
+    msg = quote(f"Подкатегория «{clean_name}» успешно создана")
     return RedirectResponse(url=f"/products?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/{product_id}/edit")
-async def edit_product(
-    product_id: int,
+@router.post("/{subcategory_id}/edit")
+@router.post("/subcategories/{subcategory_id}/edit")
+async def edit_subcategory(
+    subcategory_id: int,
     admin: AdminUser,
     category_id: int = Form(...),
     name: str = Form(...),
     price: float = Form(...),
     description: str = Form(""),
-    content: str = Form(""),
     session: AsyncSession = Depends(get_db),
 ):
-    product = await session.get(Product, product_id)
-    if not product:
-        msg = quote("Товар не найден")
+    subcat = await session.get(Subcategory, subcategory_id)
+    if not subcat:
+        msg = quote("Подкатегория не найдена")
         return RedirectResponse(url=f"/products?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
-    product.category_id = category_id
-    product.name = name.strip()
-    product.price = price
-    product.description = description.strip()
-    product.content = content.strip()
+    subcat.category_id = category_id
+    subcat.name = name.strip()
+    subcat.price = price
+    subcat.description = description.strip()
 
     await session.commit()
-    msg = quote(f"Товар «{product.name}» успешно обновлен")
+    msg = quote(f"Подкатегория «{subcat.name}» успешно обновлена")
     return RedirectResponse(url=f"/products?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/{product_id}/delete")
-async def delete_product(
-    product_id: int,
+@router.post("/{subcategory_id}/delete")
+@router.post("/subcategories/{subcategory_id}/delete")
+async def delete_subcategory(
+    subcategory_id: int,
     admin: AdminUser,
     session: AsyncSession = Depends(get_db),
 ):
-    product = await session.get(Product, product_id)
-    if not product:
-        msg = quote("Товар не найден")
+    subcat = await session.get(Subcategory, subcategory_id)
+    if not subcat:
+        msg = quote("Подкатегория не найдена")
         return RedirectResponse(url=f"/products?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
-    name = product.name
-    await session.delete(product)
+    name = subcat.name
+    await session.delete(subcat)
     await session.commit()
 
-    msg = quote(f"Товар «{name}» успешно удален")
+    msg = quote(f"Подкатегория «{name}» и связанные аккаунты удалены")
     return RedirectResponse(url=f"/products?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)

@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from bot.config import config
-from bot.database.models import User, TopUpTicket, TicketStatus, Category, Product
-from bot.keyboards.callbacks import TicketActionCD
+from bot.database.models import User, TopUpTicket, TicketStatus, Order, OrderStatus
+from bot.keyboards.callbacks import TicketActionCD, OrderCD
+from bot.keyboards.inline import get_dispute_admin_kb
 from bot.services.ticket import approve_ticket, reject_ticket
 
 admin_router = Router()
@@ -25,16 +26,34 @@ async def show_admin_panel(callback: CallbackQuery, session: AsyncSession):
     pending_tickets = await session.scalar(
         select(func.count(TopUpTicket.id)).where(TopUpTicket.status == TicketStatus.PENDING)
     ) or 0
+    dispute_count = await session.scalar(
+        select(func.count(Order.id)).where(Order.status == OrderStatus.DISPUTED)
+    ) or 0
+    hold_count = await session.scalar(
+        select(func.count(Order.id)).where(Order.status == OrderStatus.HOLD)
+    ) or 0
+
+    hold_sum = await session.scalar(
+        select(func.coalesce(func.sum(Order.amount), 0.0)).where(Order.status == OrderStatus.HOLD)
+    ) or 0.0
+    completed_sum = await session.scalar(
+        select(func.coalesce(func.sum(Order.amount), 0.0)).where(Order.status == OrderStatus.COMPLETED)
+    ) or 0.0
 
     builder = InlineKeyboardBuilder()
-    builder.button(text=f"📋 Активные тикеты ({pending_tickets})", callback_data="admin_pending_tickets")
+    builder.button(text=f"📋 Тикеты пополнения ({pending_tickets})", callback_data="admin_pending_tickets")
+    builder.button(text=f"🚨 Активные диспуты ({dispute_count})", callback_data="admin_disputes")
+    builder.button(text=f"⏳ Заказы в холде ({hold_count})", callback_data="admin_hold_orders")
     builder.button(text="◀️ Главное меню", callback_data="main_menu")
     builder.adjust(1)
 
     text = (
         "⚙️ <b>Панель администратора</b>\n\n"
         f"👥 Всего пользователей: <b>{total_users}</b>\n"
-        f"⏳ Ожидают проверки тикетов: <b>{pending_tickets}</b>"
+        f"⏳ Ожидают пополнения (тикеты): <b>{pending_tickets}</b>\n"
+        f"🚨 Открытых диспутов: <b>{dispute_count}</b>\n"
+        f"🔒 Заказов в холде 24ч: <b>{hold_count}</b> (${float(hold_sum):.2f})\n"
+        f"💰 Завершенных продаж (разморожено): <b>${float(completed_sum):.2f}</b>"
     )
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
 
@@ -122,3 +141,91 @@ async def process_ticket_action(
             await callback.message.edit_text(f"❌ <b>{msg}</b>")
         else:
             await callback.message.edit_text(f"⚠️ {msg}")
+
+@admin_router.callback_query(F.data == "admin_disputes")
+async def list_disputed_orders(callback: CallbackQuery, session: AsyncSession):
+    if not is_admin_check(callback.from_user.id):
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+    await callback.answer()
+
+    result = await session.execute(
+        select(Order).where(Order.status == OrderStatus.DISPUTED).order_by(Order.disputed_at.desc())
+    )
+    orders = list(result.scalars().all())
+
+    builder = InlineKeyboardBuilder()
+    if not orders:
+        builder.button(text="◀️ Назад", callback_data="admin_menu")
+        await callback.message.edit_text("Нет активных споров.", reply_markup=builder.as_markup())
+        return
+
+    for o in orders:
+        builder.button(
+            text=f"🚨 Спор #{o.id} (${o.amount:.2f})",
+            callback_data=f"admin_view_dsp:{o.id}"
+        )
+    builder.button(text="◀️ Назад", callback_data="admin_menu")
+    builder.adjust(1)
+    await callback.message.edit_text("Выберите спор для рассмотрения:", reply_markup=builder.as_markup())
+
+@admin_router.callback_query(F.data.startswith("admin_view_dsp:"))
+async def view_admin_dispute(callback: CallbackQuery, session: AsyncSession):
+    if not is_admin_check(callback.from_user.id):
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+    await callback.answer()
+
+    order_id = int(callback.data.split(":")[1])
+    order = await session.get(Order, order_id)
+    if not order:
+        await callback.answer("Заказ не найден.", show_alert=True)
+        return
+
+    user = await session.scalar(select(User).where(User.tg_id == order.user_id))
+
+    history = ""
+    for m in order.messages[-5:]:
+        sender_label = "Клиент" if m.sender_role == "client" else "Админ"
+        history += f"• <b>{sender_label}:</b> {m.text}\n"
+
+    text = (
+        f"🚨 <b>Диспут по заказу #ORDER-{order.id}</b>\n\n"
+        f"👤 Покупатель: @{user.username if user else '—'} (<code>{order.user_id}</code>)\n"
+        f"💵 Сумма: <b>${order.amount:.2f} USDT</b>\n"
+        f"📦 Товар: <code>{order.account.data if order.account else '—'}</code>\n\n"
+        f"💬 <b>История сообщений:</b>\n{history or 'Нет сообщений'}"
+    )
+
+    kb = get_dispute_admin_kb(order.id)
+    await callback.message.edit_text(text, reply_markup=kb)
+
+@admin_router.callback_query(F.data == "admin_hold_orders")
+async def list_hold_orders(callback: CallbackQuery, session: AsyncSession):
+    if not is_admin_check(callback.from_user.id):
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+    await callback.answer()
+
+    result = await session.execute(
+        select(Order).where(Order.status == OrderStatus.HOLD).order_by(Order.hold_until.asc()).limit(15)
+    )
+    orders = list(result.scalars().all())
+
+    builder = InlineKeyboardBuilder()
+    if not orders:
+        builder.button(text="◀️ Назад", callback_data="admin_menu")
+        await callback.message.edit_text("Нет заказов в холде.", reply_markup=builder.as_markup())
+        return
+
+    now = datetime.utcnow()
+    text = "🔒 <b>Заказы в 24-часовом холде:</b>\n\n"
+    for o in orders:
+        remaining = o.hold_until - now
+        hours, remainder = divmod(max(0, int(remaining.total_seconds())), 3600)
+        minutes = remainder // 60
+        text += f"• <b>#ORDER-{o.id}</b>: ${o.amount:.2f} — осталось {hours}ч {minutes}м\n"
+
+    builder.button(text="◀️ Назад", callback_data="admin_menu")
+    builder.adjust(1)
+    await callback.message.edit_text(text, reply_markup=builder.as_markup())

@@ -15,6 +15,7 @@ from web.routers import (
     tickets_router,
     products_router,
     users_router,
+    orders_router,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -68,6 +69,11 @@ async def not_authenticated_handler(request: Request, exc: NotAuthenticatedExcep
         status_code=303
     )
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 # Include routers
 app.include_router(auth_router)
 app.include_router(dashboard_router)
@@ -75,3 +81,4 @@ app.include_router(accounts_router)
 app.include_router(tickets_router)
 app.include_router(products_router)
 app.include_router(users_router)
+app.include_router(orders_router)

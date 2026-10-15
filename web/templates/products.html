@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Товары и Категории{% endblock %}
+{% block title %}Категории и Подкатегории{% endblock %}
 
 {% block content %}
 <div class="space-y-8">
@@ -8,10 +8,10 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
             <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
-                <i class="fa-solid fa-tags text-indigo-400"></i>
-                <span>Товары и Категории</span>
+                <i class="fa-solid fa-layer-group text-indigo-400"></i>
+                <span>Категории и Подкатегории</span>
             </h2>
-            <p class="text-sm text-slate-400 mt-0.5">Управление каталогом магазина, ценами и описаниями</p>
+            <p class="text-sm text-slate-400 mt-0.5">Структура каталога магазина: Категория &rarr; Подкатегория &rarr; Товар (Аккаунты)</p>
         </div>
 
         <div class="flex items-center space-x-2.5">
@@ -19,9 +19,9 @@
                 <i class="fa-solid fa-folder-plus text-xs"></i>
                 <span>+ Категория</span>
             </button>
-            <button onclick="openModal('add-product-modal')" class="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
+            <button onclick="openModal('add-subcategory-modal')" class="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
                 <i class="fa-solid fa-plus text-xs"></i>
-                <span>+ Добавить товар</span>
+                <span>+ Подкатегория</span>
             </button>
         </div>
     </div>
@@ -38,10 +38,13 @@
             {% for cat in categories %}
             <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between">
                 <div>
-                    <h4 class="font-medium text-white text-sm">{{ cat.name }}</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">{{ cat.products | length }} товаров в категории</p>
+                    <h4 class="font-medium text-white text-sm flex items-center space-x-2">
+                        <i class="fa-regular fa-folder text-indigo-400 text-xs"></i>
+                        <span>{{ cat.name }}</span>
+                    </h4>
+                    <p class="text-xs text-slate-400 mt-0.5">{{ cat.subcategories | length }} подкатегорий</p>
                 </div>
-                <form method="POST" action="/products/categories/{{ cat.id }}/delete" onsubmit="return confirm('Удалить категорию «{{ cat.name }}» и все ее товары?')">
+                <form method="POST" action="/products/categories/{{ cat.id }}/delete" onsubmit="return confirm('Удалить категорию «{{ cat.name }}» и все ее подкатегории с товарами?')">
                     <button type="submit" title="Удалить категорию" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
                         <i class="fa-solid fa-trash-can text-sm"></i>
                     </button>
@@ -50,18 +53,18 @@
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-sm text-slate-500 text-center py-4">Категорий пока нет</p>
+        <p class="text-sm text-slate-500 text-center py-4">Категорий пока нет. Нажмите «+ Категория» для создания.</p>
         {% endif %}
     </div>
 
-    <!-- Products Section -->
+    <!-- Subcategories Section -->
     <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <div class="p-6 border-b border-slate-800 flex items-center justify-between">
             <h3 class="text-base font-semibold text-white flex items-center space-x-2">
-                <i class="fa-solid fa-box text-indigo-400"></i>
-                <span>Список товаров каталога</span>
+                <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
+                <span>Список подкатегорий каталога</span>
             </h3>
-            <span class="text-xs text-slate-400">Всего позиций: {{ products | length }}</span>
+            <span class="text-xs text-slate-400">Всего подкатегорий: {{ subcategories | length }}</span>
         </div>
 
         <div class="overflow-x-auto">
@@ -69,57 +72,57 @@
                 <thead>
                     <tr class="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 bg-slate-950/50">
                         <th class="py-3 px-4">ID</th>
-                        <th class="py-3 px-4">Название</th>
-                        <th class="py-3 px-4">Категория</th>
+                        <th class="py-3 px-4">Подкатегория</th>
+                        <th class="py-3 px-4">Родительская категория</th>
                         <th class="py-3 px-4">Цена</th>
-                        <th class="py-3 px-4">На складе</th>
+                        <th class="py-3 px-4">В наличии (Товары)</th>
                         <th class="py-3 px-4">Продано</th>
                         <th class="py-3 px-4">Описание</th>
                         <th class="py-3 px-4 text-right">Действия</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/60 text-slate-300">
-                    {% if products %}
-                        {% for prod in products %}
-                        {% set stock = stock_counts.get(prod.id, 0) %}
-                        {% set sold = sold_counts.get(prod.id, 0) %}
+                    {% if subcategories %}
+                        {% for sub in subcategories %}
+                        {% set stock = stock_counts.get(sub.id, 0) %}
+                        {% set sold = sold_counts.get(sub.id, 0) %}
                         <tr class="hover:bg-slate-800/40 transition-colors">
-                            <td class="py-3.5 px-4 font-mono text-xs text-slate-500">#{{ prod.id }}</td>
-                            <td class="py-3.5 px-4 font-semibold text-white">{{ prod.name }}</td>
+                            <td class="py-3.5 px-4 font-mono text-xs text-slate-500">#{{ sub.id }}</td>
+                            <td class="py-3.5 px-4 font-semibold text-white">{{ sub.name }}</td>
                             <td class="py-3.5 px-4 text-xs">
                                 <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
-                                    {{ prod.category.name if prod.category else '—' }}
+                                    {{ sub.category.name if sub.category else '—' }}
                                 </span>
                             </td>
-                            <td class="py-3.5 px-4 font-bold text-emerald-400">{{ prod.price | currency }}</td>
+                            <td class="py-3.5 px-4 font-bold text-emerald-400">{{ sub.price | currency }}</td>
                             <td class="py-3.5 px-4 text-xs font-semibold">
                                 {% if stock > 0 %}
-                                <a href="/accounts?product_id={{ prod.id }}&status_filter=available" class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors">
-                                    {{ stock }} шт.
+                                <a href="/accounts?subcategory_id={{ sub.id }}&status_filter=available" class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors">
+                                    {{ stock }} акк.
                                 </a>
                                 {% else %}
                                 <span class="px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/25">
-                                    0 шт.
+                                    0 акк.
                                 </span>
                                 {% endif %}
                             </td>
                             <td class="py-3.5 px-4 text-xs text-slate-400">
-                                <a href="/accounts?product_id={{ prod.id }}&status_filter=sold" class="hover:underline">
-                                    {{ sold }} шт.
+                                <a href="/accounts?subcategory_id={{ sub.id }}&status_filter=sold" class="hover:underline">
+                                    {{ sold }} акк.
                                 </a>
                             </td>
-                            <td class="py-3.5 px-4 text-xs text-slate-400 max-w-xs truncate" title="{{ prod.description }}">
-                                {{ prod.description or '—' }}
+                            <td class="py-3.5 px-4 text-xs text-slate-400 max-w-xs truncate" title="{{ sub.description }}">
+                                {{ sub.description or '—' }}
                             </td>
                             <td class="py-3.5 px-4 text-right">
                                 <div class="inline-flex items-center space-x-2">
                                     <button type="button"
-                                        onclick="openEditProductModal({{ prod.id }}, {{ prod.category_id }}, '{{ prod.name | replace("'", "\\'") }}', {{ prod.price }}, '{{ (prod.description or '') | replace("'", "\\'") | replace("\n", "\\n") }}', '{{ (prod.content or '') | replace("'", "\\'") | replace("\n", "\\n") }}')"
+                                        onclick="openEditSubcategoryModal({{ sub.id }}, {{ sub.category_id }}, '{{ sub.name | replace("'", "\\'") }}', {{ sub.price }}, '{{ (sub.description or '') | replace("'", "\\'") | replace("\n", "\\n") }}')"
                                         title="Редактировать"
                                         class="text-slate-400 hover:text-indigo-400 p-1.5 transition-colors">
                                         <i class="fa-solid fa-pen-to-square text-sm"></i>
                                     </button>
-                                    <form method="POST" action="/products/{{ prod.id }}/delete" onsubmit="return confirm('Удалить товар «{{ prod.name }}» и все связанные аккаунты?')" class="inline">
+                                    <form method="POST" action="/products/subcategories/{{ sub.id }}/delete" onsubmit="return confirm('Удалить подкатегорию «{{ sub.name }}» и все ее аккаунты?')" class="inline">
                                         <button type="submit" title="Удалить" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
                                             <i class="fa-solid fa-trash-can text-sm"></i>
                                         </button>
@@ -131,7 +134,7 @@
                     {% else %}
                         <tr>
                             <td colspan="8" class="py-12 text-center text-slate-500 text-sm">
-                                Каталог товаров пуст
+                                Подкатегорий пока нет. Нажмите «+ Подкатегория» для добавления.
                             </td>
                         </tr>
                     {% endif %}
@@ -154,7 +157,7 @@
         <form method="POST" action="/products/categories/create" class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название категории *</label>
-                <input type="text" name="name" required placeholder="Например: VPN & Proxy"
+                <input type="text" name="name" required placeholder="Например: VPN & Proxy, Telegram, Discord..."
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div class="pt-2 flex justify-end space-x-2">
@@ -169,17 +172,17 @@
     </div>
 </div>
 
-<!-- ================= MODAL: ADD PRODUCT ================= -->
-<div id="add-product-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+<!-- ================= MODAL: ADD SUBCATEGORY ================= -->
+<div id="add-subcategory-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
-        <button onclick="closeModal('add-product-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <button onclick="closeModal('add-subcategory-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
             <i class="fa-solid fa-xmark text-lg"></i>
         </button>
         <h3 class="text-lg font-bold text-white mb-4 flex items-center space-x-2">
             <i class="fa-solid fa-plus text-indigo-400"></i>
-            <span>Добавить новый товар</span>
+            <span>Добавить новую подкатегорию</span>
         </h3>
-        <form method="POST" action="/products/create" class="space-y-4">
+        <form method="POST" action="/products/subcategories/create" class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Категория *</label>
                 <select name="category_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -191,52 +194,46 @@
             </div>
 
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название товара *</label>
-                <input type="text" name="name" required placeholder="Например: VLESS VPN 1 мес."
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название подкатегории *</label>
+                <input type="text" name="name" required placeholder="Например: USA 2024, Автореги, VLESS Reality..."
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
 
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена ($) *</label>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена за 1 аккаунт ($) *</label>
                 <input type="number" step="0.01" min="0" name="price" required placeholder="4.99"
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
 
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Описание</label>
-                <textarea name="description" rows="3" placeholder="Подробное описание товара для клиента..."
+                <textarea name="description" rows="3" placeholder="Подробное описание подкатегории для клиентов..."
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
             </div>
 
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Резервный контент / ссылка</label>
-                <input type="text" name="content" placeholder="Резервный ключ (если аккаунт не привязан)"
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-
             <div class="pt-2 flex justify-end space-x-2">
-                <button type="button" onclick="closeModal('add-product-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+                <button type="button" onclick="closeModal('add-subcategory-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
                     Отмена
                 </button>
                 <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
-                    Сохранить товар
+                    Сохранить подкатегорию
                 </button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- ================= MODAL: EDIT PRODUCT ================= -->
-<div id="edit-product-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+<!-- ================= MODAL: EDIT SUBCATEGORY ================= -->
+<div id="edit-subcategory-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
-        <button onclick="closeModal('edit-product-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <button onclick="closeModal('edit-subcategory-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
             <i class="fa-solid fa-xmark text-lg"></i>
         </button>
         <h3 class="text-lg font-bold text-white mb-4 flex items-center space-x-2">
             <i class="fa-solid fa-pen-to-square text-indigo-400"></i>
-            <span>Редактировать товар</span>
+            <span>Редактировать подкатегорию</span>
         </h3>
-        <form id="edit-product-form" method="POST" action="" class="space-y-4">
+        <form id="edit-subcategory-form" method="POST" action="" class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Категория *</label>
                 <select id="edit-category-id" name="category_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -247,13 +244,13 @@
             </div>
 
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название товара *</label>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название подкатегории *</label>
                 <input type="text" id="edit-name" name="name" required
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
 
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена ($) *</label>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена за 1 аккаунт ($) *</label>
                 <input type="number" step="0.01" min="0" id="edit-price" name="price" required
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
@@ -264,18 +261,12 @@
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
             </div>
 
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Резервный контент / ссылка</label>
-                <input type="text" id="edit-content" name="content"
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-
             <div class="pt-2 flex justify-end space-x-2">
-                <button type="button" onclick="closeModal('edit-product-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+                <button type="button" onclick="closeModal('edit-subcategory-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
                     Отмена
                 </button>
                 <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
-                    Обновить
+                    Сохранить изменения
                 </button>
             </div>
         </form>
@@ -283,24 +274,15 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_scripts %}
 <script>
-    function openModal(id) {
-        document.getElementById(id).classList.remove('hidden');
-    }
-
-    function closeModal(id) {
-        document.getElementById(id).classList.add('hidden');
-    }
-
-    function openEditProductModal(id, categoryId, name, price, description, content) {
-        document.getElementById('edit-product-form').action = '/products/' + id + '/edit';
+    function openEditSubcategoryModal(id, categoryId, name, price, description) {
+        document.getElementById('edit-subcategory-form').action = '/products/subcategories/' + id + '/edit';
         document.getElementById('edit-category-id').value = categoryId;
         document.getElementById('edit-name').value = name;
         document.getElementById('edit-price').value = price;
         document.getElementById('edit-description').value = description;
-        document.getElementById('edit-content').value = content;
-        openModal('edit-product-modal');
+        openModal('edit-subcategory-modal');
     }
 </script>
 {% endblock %}
