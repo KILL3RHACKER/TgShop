@@ -1,11 +1,14 @@
+import os
 import io
 import re
+import tempfile
+import subprocess
 import zipfile
 from typing import TypedDict
 from sqlalchemy import select, delete, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import Account, Subcategory
+from bot.database.models import Account, Product
 
 class ParsedAccount(TypedDict):
     name: str
@@ -138,21 +141,173 @@ def parse_accounts_from_zip(zip_bytes: bytes) -> tuple[list[ParsedAccount], int]
 
     return results, files_processed
 
+def parse_accounts_from_rar(rar_bytes: bytes) -> tuple[list[ParsedAccount], int]:
+    results: list[ParsedAccount] = []
+    seen = set()
+    files_processed = 0
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        rar_file = os.path.join(tmpdir, "archive.rar")
+        with open(rar_file, "wb") as f:
+            f.write(rar_bytes)
+
+        out_dir = os.path.join(tmpdir, "out")
+        os.makedirs(out_dir, exist_ok=True)
+
+        try:
+            subprocess.run(
+                ["unrar", "x", "-f", rar_file, out_dir],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+                check=False
+            )
+        except Exception:
+            pass
+
+        for root, _, files in os.walk(out_dir):
+            for file in files:
+                if not file.lower().endswith(".txt"):
+                    continue
+                file_path = os.path.join(root, file)
+                try:
+                    with open(file_path, "rb") as f:
+                        data = f.read()
+                except Exception:
+                    continue
+
+                if b"\x00" in data[:1024]:
+                    continue
+
+                text = None
+                for encoding in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
+                    try:
+                        text = data.decode(encoding)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+
+                if text is None:
+                    continue
+
+                files_processed += 1
+                for line in text.splitlines():
+                    parsed = parse_account_line(line)
+                    if parsed:
+                        key = parsed["data"].upper()
+                        if key not in seen:
+                            seen.add(key)
+                            results.append(parsed)
+
+    return results, files_processed
+
+def parse_accounts_from_archive(filename: str, archive_bytes: bytes) -> tuple[list[ParsedAccount], int]:
+    fn = filename.lower()
+    if fn.endswith(".zip"):
+        return parse_accounts_from_zip(archive_bytes)
+    elif fn.endswith(".rar"):
+        return parse_accounts_from_rar(archive_bytes)
+    else:
+        raise ValueError("Поддерживаются только архивы .zip и .rar")
+
+def parse_archive_by_files(filename: str, archive_bytes: bytes) -> tuple[dict[str, list[ParsedAccount]], int]:
+    """
+    Парсит архив (.zip или .rar) и возвращает:
+    { "имя_файла_без_расширения": [ParsedAccount, ...] }
+    """
+    file_map: dict[str, list[ParsedAccount]] = {}
+    files_processed = 0
+    fn = filename.lower()
+
+    if fn.endswith(".zip"):
+        with zipfile.ZipFile(io.BytesIO(archive_bytes)) as zf:
+            for info in zf.infolist():
+                if info.is_dir() or info.filename.startswith("__MACOSX"):
+                    continue
+                try:
+                    data = zf.read(info)
+                except Exception:
+                    continue
+                if b"\x00" in data[:1024]:
+                    continue
+                text = None
+                for encoding in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
+                    try:
+                        text = data.decode(encoding)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                if text is None:
+                    continue
+
+                base_name = os.path.splitext(os.path.basename(info.filename))[0].strip()
+                lines = [parse_account_line(l) for l in text.splitlines() if parse_account_line(l)]
+                if lines:
+                    files_processed += 1
+                    file_map.setdefault(base_name, []).extend(lines)
+
+    elif fn.endswith(".rar"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rar_file = os.path.join(tmpdir, "archive.rar")
+            with open(rar_file, "wb") as f:
+                f.write(archive_bytes)
+            out_dir = os.path.join(tmpdir, "out")
+            os.makedirs(out_dir, exist_ok=True)
+            try:
+                subprocess.run(
+                    ["unrar", "x", "-f", rar_file, out_dir],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=30,
+                    check=False
+                )
+            except Exception:
+                pass
+
+            for root, _, files in os.walk(out_dir):
+                for file in files:
+                    if not file.lower().endswith(".txt"):
+                        continue
+                    file_path = os.path.join(root, file)
+                    try:
+                        with open(file_path, "rb") as f:
+                            data = f.read()
+                    except Exception:
+                        continue
+                    if b"\x00" in data[:1024]:
+                        continue
+                    text = None
+                    for encoding in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
+                        try:
+                            text = data.decode(encoding)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    if text is None:
+                        continue
+                    base_name = os.path.splitext(file)[0].strip()
+                    lines = [parse_account_line(l) for l in text.splitlines() if parse_account_line(l)]
+                    if lines:
+                        files_processed += 1
+                        file_map.setdefault(base_name, []).extend(lines)
+
+    return file_map, files_processed
+
 async def add_accounts_bulk(
     session: AsyncSession,
-    subcategory_id: int,
+    product_id: int,
     accounts_data: list[ParsedAccount]
 ) -> int:
     if not accounts_data:
         return 0
 
-    subcategory = await session.get(Subcategory, subcategory_id)
-    if not subcategory:
-        raise ValueError(f"Subcategory with ID {subcategory_id} not found")
+    product = await session.get(Product, product_id)
+    if not product:
+        raise ValueError(f"Product with ID {product_id} not found")
 
     new_accounts = [
         Account(
-            subcategory_id=subcategory_id,
+            product_id=product_id,
             name=acc["name"],
             date_info=acc["date_info"],
             data=acc["data"],
@@ -169,7 +324,7 @@ async def add_accounts_bulk(
 async def delete_accounts_by_list(
     session: AsyncSession,
     text: str,
-    subcategory_id: int | None = None
+    product_id: int | None = None
 ) -> int:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
@@ -202,8 +357,8 @@ async def delete_accounts_by_list(
                 ) if parsed["date_info"] != "N/A" else Account.name.ilike(parsed["name"])
             )
         ]
-        if subcategory_id is not None and subcategory_id > 0:
-            conditions.append(Account.subcategory_id == subcategory_id)
+        if product_id is not None and product_id > 0:
+            conditions.append(Account.product_id == product_id)
 
         stmt = select(Account.id).where(*conditions).limit(1)
         acc_id = await session.scalar(stmt)

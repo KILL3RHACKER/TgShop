@@ -15,10 +15,10 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5">
-            <!-- Button: Upload ZIP -->
+            <!-- Button: Upload Archive (ZIP / RAR) -->
             <button onclick="openModal('zip-modal')" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
                 <i class="fa-solid fa-file-zipper"></i>
-                <span>Загрузить ZIP</span>
+                <span>Загрузить ZIP / RAR</span>
             </button>
 
             <!-- Button: Delete by List -->
@@ -77,7 +77,9 @@
                 <select name="product_id" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="">Все товары</option>
                     {% for p in products %}
-                    <option value="{{ p.id }}" {% if selected_product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    <option value="{{ p.id }}" {% if selected_product_id == p.id %}selected{% endif %}>
+                        {{ p.subcategory.name if p.subcategory else '' }} &rarr; {{ p.name }}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
@@ -222,7 +224,7 @@
     </form>
 </div>
 
-<!-- ================= MODAL: ZIP UPLOAD ================= -->
+<!-- ================= MODAL: ARCHIVE UPLOAD (ZIP / RAR) ================= -->
 <div id="zip-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
         <button onclick="closeModal('zip-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
@@ -230,24 +232,27 @@
         </button>
         <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-1">
             <i class="fa-solid fa-file-zipper text-indigo-400"></i>
-            <span>Пакетная загрузка через ZIP</span>
+            <span>Пакетная загрузка через ZIP / RAR</span>
         </h3>
-        <p class="text-xs text-slate-400 mb-4">Архив может содержать один или несколько .txt файлов. Дата принимается любого формата и автоматически приводится к <code>NAME SURNAME, DD.MM</code> (все лишние данные после месяца строго отсекаются).</p>
+        <p class="text-xs text-slate-400 mb-4">Архив (.zip или .rar) с .txt файлами. Дата автоматически приводится к <code>NAME SURNAME, DD.MM</code> (хвост после месяца строго отсекается).</p>
 
-        <form method="POST" action="/accounts/upload-zip" enctype="multipart/form-data" class="space-y-4">
+        <form method="POST" action="/accounts/upload-archive" enctype="multipart/form-data" class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Целевой товар *</label>
-                <select name="product_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="" disabled selected>Выберите товар...</option>
+                <select name="product_id" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="" selected>⚡️ Авто-определение товара по именам файлов в архиве</option>
                     {% for p in products %}
-                    <option value="{{ p.id }}">{{ p.name }} (${{ "%.2f"|format(p.price) }})</option>
+                    <option value="{{ p.id }}">
+                        {{ p.subcategory.category.name if p.subcategory and p.subcategory.category else '' }} &rarr; {{ p.subcategory.name if p.subcategory else '' }} &rarr; {{ p.name }} (${{ "%.2f"|format(p.price) }})
+                    </option>
                     {% endfor %}
                 </select>
+                <p class="text-[11px] text-slate-500 mt-1">Выберите конкретный товар или оставьте авто-определение, чтобы сервер сам отсортировал аккаунты по файлам архива.</p>
             </div>
 
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Файл архива (.zip) *</label>
-                <input type="file" name="zip_file" accept=".zip" required
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Файл архива (.zip или .rar) *</label>
+                <input type="file" name="archive_file" accept=".zip,.rar" required
                     class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
             </div>
 
@@ -281,7 +286,7 @@
                 <select name="product_id" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-rose-500">
                     <option value="">Все товары</option>
                     {% for p in products %}
-                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    <option value="{{ p.id }}">{{ p.subcategory.name if p.subcategory else '' }} &rarr; {{ p.name }}</option>
                     {% endfor %}
                 </select>
             </div>

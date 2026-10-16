@@ -2,14 +2,15 @@ from urllib.parse import quote
 from fastapi import APIRouter, Request, Depends, Form, UploadFile, File, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select, func, desc, or_, and_, delete
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import Account, Subcategory
+from bot.database.models import Account, Product, Subcategory, Category
 from web.auth import AdminUser
 from web.dependencies import get_db
 from web.services import (
-    parse_accounts_from_text,
-    parse_accounts_from_zip,
+    parse_accounts_from_archive,
+    parse_archive_by_files,
     add_accounts_bulk,
     delete_accounts_by_list,
 )
@@ -25,8 +26,8 @@ async def list_accounts(
     request: Request,
     admin: AdminUser,
     session: AsyncSession = Depends(get_db),
+    product_id: int | None = None,
     subcategory_id: int | None = None,
-    product_id: int | None = None,  # Backward compatibility alias
     status_filter: str = "all",
     q: str = "",
     page: int = 1,
@@ -34,19 +35,23 @@ async def list_accounts(
     msg: str | None = None,
     msg_type: str = "success",
 ):
-    selected_subcat_id = subcategory_id if subcategory_id is not None else product_id
+    selected_prod_id = product_id if product_id is not None else subcategory_id
 
     page = max(1, page)
     offset = (page - 1) * page_size
 
-    # Fetch all subcategories for filter dropdown and modal selects
-    subcategories_res = await session.execute(select(Subcategory).order_by(Subcategory.name))
-    subcategories = list(subcategories_res.scalars().all())
+    # Fetch all products with subcategory and category for filter dropdown and modal selects
+    products_res = await session.execute(
+        select(Product)
+        .options(selectinload(Product.subcategory).selectinload(Subcategory.category))
+        .order_by(Product.name)
+    )
+    products = list(products_res.scalars().all())
 
-    # Build base filter conditions
+    # Build filter conditions
     conditions = []
-    if selected_subcat_id is not None and selected_subcat_id > 0:
-        conditions.append(Account.subcategory_id == selected_subcat_id)
+    if selected_prod_id is not None and selected_prod_id > 0:
+        conditions.append(Account.product_id == selected_prod_id)
 
     if status_filter == "available":
         conditions.append(Account.is_sold == False)
@@ -82,6 +87,7 @@ async def list_accounts(
     # Fetch paginated accounts: Сортировка аккаунтов - свежие на первой странице (created_at DESC, id DESC)
     stmt = (
         select(Account)
+        .options(selectinload(Account.product).selectinload(Product.subcategory).selectinload(Subcategory.category))
         .order_by(Account.created_at.desc(), Account.id.desc())
         .offset(offset)
         .limit(page_size)
@@ -101,10 +107,8 @@ async def list_accounts(
             "admin": admin,
             "active_tab": "accounts",
             "accounts": accounts,
-            "subcategories": subcategories,
-            "products": subcategories,  # Alias
-            "selected_subcategory_id": selected_subcat_id,
-            "selected_product_id": selected_subcat_id,
+            "products": products,
+            "selected_product_id": selected_prod_id,
             "status_filter": status_filter,
             "q": search,
             "page": page,
@@ -120,158 +124,146 @@ async def list_accounts(
     )
 
 @router.post("/upload-zip")
-async def upload_zip_accounts(
+@router.post("/upload-archive")
+async def upload_archive_accounts(
     admin: AdminUser,
-    subcategory_id: int | None = Form(None),
+    request: Request,
     product_id: int | None = Form(None),
-    zip_file: UploadFile = File(...),
+    subcategory_id: int | None = Form(None),
     session: AsyncSession = Depends(get_db),
 ):
-    target_id = subcategory_id if subcategory_id is not None else product_id
-    if not target_id:
-        msg = quote("Выберите подкатегорию для загрузки аккаунтов")
+    target_id = product_id if product_id is not None else subcategory_id
+    form = await request.form()
+    archive_file: UploadFile = form.get("archive_file") or form.get("zip_file")
+
+    if not archive_file:
+        msg = quote("Файл архива не загружен")
         return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
-    if not zip_file.filename.lower().endswith(".zip"):
-        msg = quote("Пожалуйста, загрузите валидный .zip архив")
-        return RedirectResponse(
-            url=f"/accounts?subcategory_id={target_id}&msg={msg}&msg_type=error",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-
-    try:
-        content = await zip_file.read()
-        parsed_accounts, files_count = parse_accounts_from_zip(content)
-        if not parsed_accounts:
-            msg = quote("В ZIP-архиве не найдено подходящих строк аккаунтов")
-            return RedirectResponse(
-                url=f"/accounts?subcategory_id={target_id}&msg={msg}&msg_type=warning",
-                status_code=status.HTTP_303_SEE_OTHER,
-            )
-
-        added = await add_accounts_bulk(session, target_id, parsed_accounts)
-        msg = quote(f"Успешно импортировано {added} аккаунтов из {files_count} файлов ZIP-архива (свежие на 1-й странице)")
-        return RedirectResponse(
-            url=f"/accounts?subcategory_id={target_id}&msg={msg}&msg_type=success",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-    except Exception as e:
-        msg = quote(f"Ошибка при обработке ZIP: {str(e)}")
-        return RedirectResponse(
-            url=f"/accounts?subcategory_id={target_id}&msg={msg}&msg_type=error",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-
-@router.post("/upload-paste")
-async def upload_paste_accounts(
-    admin: AdminUser,
-    subcategory_id: int | None = Form(None),
-    product_id: int | None = Form(None),
-    paste_text: str = Form(...),
-    session: AsyncSession = Depends(get_db),
-):
-    target_id = subcategory_id if subcategory_id is not None else product_id
-    if not target_id:
-        msg = quote("Выберите подкатегорию для загрузки аккаунтов")
+    filename = archive_file.filename or ""
+    fn_lower = filename.lower()
+    if not (fn_lower.endswith(".zip") or fn_lower.endswith(".rar")):
+        msg = quote("Поддерживаются только архивы .zip и .rar")
         return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
     try:
-        parsed_accounts = parse_accounts_from_text(paste_text)
-        if not parsed_accounts:
-            msg = quote("Не удалось распознать аккаунты. Проверьте формат строк")
+        content = await archive_file.read()
+
+        # Check if target_id is specified
+        if target_id is not None and target_id > 0:
+            parsed_accounts, files_count = parse_accounts_from_archive(filename, content)
+            if not parsed_accounts:
+                msg = quote(f"В архиве {filename} не найдено подходящих строк аккаунтов")
+                return RedirectResponse(
+                    url=f"/accounts?product_id={target_id}&msg={msg}&msg_type=warning",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            added = await add_accounts_bulk(session, target_id, parsed_accounts)
+            msg = quote(f"Успешно импортировано {added} аккаунтов из архива {filename} (свежие на 1-й странице витрины)")
             return RedirectResponse(
-                url=f"/accounts?subcategory_id={target_id}&msg={msg}&msg_type=warning",
+                url=f"/accounts?product_id={target_id}&msg={msg}&msg_type=success",
                 status_code=status.HTTP_303_SEE_OTHER,
             )
 
-        added = await add_accounts_bulk(session, target_id, parsed_accounts)
-        msg = quote(f"Успешно добавлено {added} аккаунтов (все капсом, свежие на 1-й странице)")
-        return RedirectResponse(
-            url=f"/accounts?subcategory_id={target_id}&msg={msg}&msg_type=success",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-    except Exception as e:
-        msg = quote(f"Ошибка при добавлении аккаунтов: {str(e)}")
-        return RedirectResponse(
-            url=f"/accounts?subcategory_id={target_id}&msg={msg}&msg_type=error",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
+        # Automatic mode: match files to products ("пачкой на сервер, а на витрине сами сортируются")
+        file_map, files_count = parse_archive_by_files(filename, content)
+        if not file_map:
+            msg = quote(f"В архиве {filename} не найдено .txt файлов с аккаунтами")
+            return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=warning", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/{account_id}/delete")
+        # Fetch all products to match
+        products_res = await session.execute(select(Product))
+        all_products = list(products_res.scalars().all())
+
+        total_added = 0
+        matched_details = []
+
+        for base_name, acc_list in file_map.items():
+            # Find best matching product
+            best_prod = None
+            base_clean = base_name.strip().lower()
+            for p in all_products:
+                p_clean = p.name.strip().lower()
+                if p_clean == base_clean or p_clean in base_clean or base_clean in p_clean:
+                    best_prod = p
+                    break
+
+            if best_prod:
+                added = await add_accounts_bulk(session, best_prod.id, acc_list)
+                total_added += added
+                matched_details.append(f"{best_prod.name}: +{added}")
+            elif all_products:
+                # If only 1 product exists in shop, assign to it
+                if len(all_products) == 1:
+                    added = await add_accounts_bulk(session, all_products[0].id, acc_list)
+                    total_added += added
+                    matched_details.append(f"{all_products[0].name}: +{added}")
+
+        if total_added > 0:
+            details_str = ", ".join(matched_details)
+            msg = quote(f"Пачка успешно загружена! Добавлено {total_added} акк. из {files_count} файлов ({details_str}). На витрине отсортированы!")
+            return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
+        else:
+            msg = quote("Файлы из архива не удалось сопоставить с существующими товарами. Выберите конкретный товар при загрузке.")
+            return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
+
+    except Exception as e:
+        msg = quote(f"Ошибка при обработке архива: {str(e)}")
+        return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
+
+@router.post("/delete-single")
 async def delete_single_account(
-    account_id: int,
     admin: AdminUser,
+    account_id: int = Form(...),
     session: AsyncSession = Depends(get_db),
-    subcategory_id: int | None = None,
     product_id: int | None = None,
 ):
-    target_id = subcategory_id if subcategory_id is not None else product_id
     acc = await session.get(Account, account_id)
-    if not acc:
+    if acc:
+        await session.delete(acc)
+        await session.commit()
+        msg = quote(f"Аккаунт #{account_id} успешно удален")
+    else:
         msg = quote("Аккаунт не найден")
-        return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
-    await session.delete(acc)
-    await session.commit()
-    msg = quote(f"Аккаунт #{account_id} успешно удален")
-    query_sub = f"?subcategory_id={target_id}&" if target_id else "?"
-    return RedirectResponse(
-        url=f"/accounts{query_sub}msg={msg}&msg_type=success",
-        status_code=status.HTTP_303_SEE_OTHER,
-    )
+    query = f"?product_id={product_id}&" if product_id else "?"
+    return RedirectResponse(url=f"/accounts{query}msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.post("/delete-selected")
 async def delete_selected_accounts(
-    request: Request,
     admin: AdminUser,
+    request: Request,
     session: AsyncSession = Depends(get_db),
 ):
     form = await request.form()
-    ids_raw = form.getlist("selected_ids")
-    subcategory_id = form.get("subcategory_id") or form.get("product_id")
+    selected_ids = form.getlist("selected_ids")
+    product_id = form.get("product_id")
 
-    if not ids_raw:
+    if not selected_ids:
         msg = quote("Не выбрано ни одного аккаунта для удаления")
-        return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=warning", status_code=status.HTTP_303_SEE_OTHER)
+        query = f"?product_id={product_id}&" if product_id else "?"
+        return RedirectResponse(url=f"/accounts{query}msg={msg}&msg_type=warning", status_code=status.HTTP_303_SEE_OTHER)
 
-    account_ids = []
-    for item in ids_raw:
-        try:
-            account_ids.append(int(item))
-        except ValueError:
-            pass
-
-    if account_ids:
-        await session.execute(delete(Account).where(Account.id.in_(account_ids)))
+    ids = [int(i) for i in selected_ids if i.isdigit()]
+    if ids:
+        await session.execute(delete(Account).where(Account.id.in_(ids)))
         await session.commit()
+        msg = quote(f"Успешно удалено выбранных аккаунтов: {len(ids)}")
+    else:
+        msg = quote("Некорректные идентификаторы")
 
-    msg = quote(f"Успешно удалено {len(account_ids)} аккаунтов")
-    query_sub = f"?subcategory_id={subcategory_id}&" if subcategory_id else "?"
-    return RedirectResponse(
-        url=f"/accounts{query_sub}msg={msg}&msg_type=success",
-        status_code=status.HTTP_303_SEE_OTHER,
-    )
+    query = f"?product_id={product_id}&" if product_id else "?"
+    return RedirectResponse(url=f"/accounts{query}msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.post("/delete-by-list")
 async def delete_by_list_accounts(
     admin: AdminUser,
     delete_text: str = Form(...),
-    subcategory_id: int | None = Form(None),
     product_id: int | None = Form(None),
     session: AsyncSession = Depends(get_db),
 ):
-    target_id = subcategory_id if subcategory_id is not None else product_id
-    try:
-        deleted = await delete_accounts_by_list(session, delete_text, target_id)
-        msg = quote(f"Успешно найдено и удалено {deleted} не проданных аккаунтов по списку")
-        query_sub = f"?subcategory_id={target_id}&" if target_id else "?"
-        return RedirectResponse(
-            url=f"/accounts{query_sub}msg={msg}&msg_type=success",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-    except Exception as e:
-        msg = quote(f"Ошибка при пакетном удалении: {str(e)}")
-        return RedirectResponse(
-            url=f"/accounts?msg={msg}&msg_type=error",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
+    deleted_count = await delete_accounts_by_list(session, delete_text, product_id)
+    msg = quote(f"Удалено аккаунтов по списку: {deleted_count}")
+    query = f"?product_id={product_id}&" if product_id else "?"
+    return RedirectResponse(url=f"/accounts{query}msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)

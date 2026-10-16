@@ -54,13 +54,31 @@ class Subcategory(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(128), index=True)
+
+    category: Mapped["Category"] = relationship(back_populates="subcategories", lazy="selectin")
+    products: Mapped[list["Product"]] = relationship(
+        back_populates="subcategory",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128), index=True)
     description: Mapped[str] = mapped_column(Text, default="")
     price: Mapped[float] = mapped_column(Numeric(12, 2), default=1.0)
 
-    category: Mapped["Category"] = relationship(back_populates="subcategories", lazy="selectin")
+    subcategory: Mapped["Subcategory"] = relationship(back_populates="products", lazy="selectin")
     accounts: Mapped[list["Account"]] = relationship(
-        back_populates="subcategory",
+        back_populates="product",
         cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+    orders: Mapped[list["Order"]] = relationship(
+        back_populates="product",
         lazy="selectin"
     )
 
@@ -68,7 +86,7 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
     data: Mapped[str] = mapped_column(Text)  # Format: "NAME SURNAME, DD.MM"
     name: Mapped[str] = mapped_column(String(128), index=True)  # Format: "NAME SURNAME"
     date_info: Mapped[str] = mapped_column(String(32), index=True)  # Format: "DD.MM"
@@ -79,15 +97,15 @@ class Account(Base):
     sold_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
-    subcategory: Mapped["Subcategory"] = relationship(back_populates="accounts", lazy="selectin")
+    product: Mapped["Product"] = relationship(back_populates="accounts", lazy="selectin")
 
     @property
-    def product(self) -> "Subcategory":
-        return self.subcategory
+    def subcategory(self) -> Subcategory | None:
+        return self.product.subcategory if self.product else None
 
     @property
-    def product_id(self) -> int:
-        return self.subcategory_id
+    def subcategory_id(self) -> int | None:
+        return self.product.subcategory_id if self.product else None
 
 class Order(Base):
     __tablename__ = "orders"
@@ -95,7 +113,7 @@ class Order(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
     account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True)
-    subcategory_id: Mapped[int | None] = mapped_column(ForeignKey("subcategories.id", ondelete="SET NULL"), nullable=True)
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
     amount: Mapped[float] = mapped_column(Numeric(12, 2))
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.HOLD, index=True)
 
@@ -106,7 +124,11 @@ class Order(Base):
 
     user: Mapped["User"] = relationship(lazy="selectin")
     account: Mapped["Account | None"] = relationship(lazy="selectin")
-    subcategory: Mapped["Subcategory | None"] = relationship(lazy="selectin")
+    product: Mapped["Product | None"] = relationship(back_populates="orders", lazy="selectin")
+
+    @property
+    def subcategory(self) -> Subcategory | None:
+        return self.product.subcategory if self.product else None
     messages: Mapped[list["DisputeMessage"]] = relationship(
         back_populates="order",
         cascade="all, delete-orphan",

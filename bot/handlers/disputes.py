@@ -78,13 +78,13 @@ async def show_order_detail(
         status_text = order.status.value
 
     acc_data = order.account.data if order.account else "—"
-    sub_name = order.subcategory.name if order.subcategory else "—"
+    prod_name = order.product.name if order.product else "—"
 
     text = (
         f"📋 <b>Заказ #ORDER-{order.id}</b>\n\n"
-        f"📂 Подкатегория: <b>{sub_name}</b>\n"
+        f"🏷 Товар: <b>{prod_name}</b>\n"
         f"💵 Сумма: <b>${order.amount:.2f}</b>\n"
-        f"📦 Товар: <code>{acc_data}</code>\n"
+        f"📦 Аккаунт: <code>{acc_data}</code>\n"
         f"📅 Дата покупки: {order.created_at.strftime('%d.%m.%Y %H:%M')}\n"
         f"📊 Статус: {status_text}\n"
     )

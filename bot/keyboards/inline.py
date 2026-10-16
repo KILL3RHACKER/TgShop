@@ -3,6 +3,7 @@ from aiogram.types import InlineKeyboardMarkup
 from bot.keyboards.callbacks import (
     CategoryCD,
     SubcategoryCD,
+    ProductCD,
     AccountCD,
     BuyAccountCD,
     FastBuyCD,
@@ -12,7 +13,7 @@ from bot.keyboards.callbacks import (
     ReplyDisputeCD,
     ResolveDisputeCD,
 )
-from bot.database.models import Category, Subcategory, Account, Order, OrderStatus
+from bot.database.models import Category, Subcategory, Product, Account, Order, OrderStatus
 
 def get_main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
@@ -40,18 +41,36 @@ def get_subcategories_kb(
     builder = InlineKeyboardBuilder()
     for subcat in subcategories:
         count = counts.get(subcat.id, 0)
-        stock_text = f"({count} шт.)" if count > 0 else "(Нет в наличии)"
+        stock_text = f"({count} тов.)" if count > 0 else ""
         builder.button(
-            text=f"📂 {subcat.name} {stock_text} — ${subcat.price:.2f}",
-            callback_data=SubcategoryCD(id=subcat.id, page=1)
+            text=f"📂 {subcat.name} {stock_text}",
+            callback_data=SubcategoryCD(id=subcat.id)
         )
     builder.button(text="◀️ Назад к категориям", callback_data="catalog")
     builder.adjust(1)
     return builder.as_markup()
 
+def get_products_kb(
+    products: list[Product],
+    category_id: int,
+    counts: dict[int, int] | None = None
+) -> InlineKeyboardMarkup:
+    counts = counts or {}
+    builder = InlineKeyboardBuilder()
+    for prod in products:
+        count = counts.get(prod.id, 0)
+        stock_text = f"({count} шт.)" if count > 0 else "(Нет в наличии)"
+        builder.button(
+            text=f"🏷 {prod.name} {stock_text} — ${prod.price:.2f}",
+            callback_data=ProductCD(id=prod.id, page=1)
+        )
+    builder.button(text="◀️ Назад к подкатегориям", callback_data=CategoryCD(id=category_id))
+    builder.adjust(1)
+    return builder.as_markup()
+
 def get_accounts_kb(
     accounts: list[Account],
-    subcategory: Subcategory,
+    product: Product,
     page: int = 1,
     total_pages: int = 1,
     total_count: int = 0
@@ -61,8 +80,8 @@ def get_accounts_kb(
     # Fast buy freshest account
     if total_count > 0:
         builder.button(
-            text=f"⚡️ Купить любой свежий (${subcategory.price:.2f})",
-            callback_data=FastBuyCD(subcategory_id=subcategory.id)
+            text=f"⚡️ Купить любой свежий (${product.price:.2f})",
+            callback_data=FastBuyCD(product_id=product.id)
         )
 
     # Individual accounts (Товары: свежие на первой странице)
@@ -76,10 +95,10 @@ def get_accounts_kb(
     # Pagination controls
     nav_buttons = []
     if page > 1:
-        nav_buttons.append(("◀️ Назад", SubcategoryCD(id=subcategory.id, page=page - 1)))
+        nav_buttons.append(("◀️ Назад", ProductCD(id=product.id, page=page - 1)))
     nav_buttons.append((f"📄 {page}/{max(total_pages, 1)}", "noop"))
     if page < total_pages:
-        nav_buttons.append(("Вперед ▶️", SubcategoryCD(id=subcategory.id, page=page + 1)))
+        nav_buttons.append(("Вперед ▶️", ProductCD(id=product.id, page=page + 1)))
 
     for text, cb in nav_buttons:
         if cb == "noop":
@@ -87,7 +106,7 @@ def get_accounts_kb(
         else:
             builder.button(text=text, callback_data=cb)
 
-    builder.button(text="◀️ Назад к подкатегориям", callback_data=CategoryCD(id=subcategory.category_id))
+    builder.button(text="◀️ Назад к товарам", callback_data=SubcategoryCD(id=product.subcategory_id))
 
     adjust_pattern = []
     if total_count > 0:
@@ -100,13 +119,13 @@ def get_accounts_kb(
     builder.adjust(*adjust_pattern)
     return builder.as_markup()
 
-def get_account_card_kb(account: Account, subcategory: Subcategory, page: int = 1) -> InlineKeyboardMarkup:
+def get_account_card_kb(account: Account, product: Product, page: int = 1) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if not account.is_sold:
-        builder.button(text=f"💳 Купить за ${subcategory.price:.2f}", callback_data=BuyAccountCD(id=account.id))
+        builder.button(text=f"💳 Купить за ${product.price:.2f}", callback_data=BuyAccountCD(id=account.id))
     else:
         builder.button(text="❌ Уже продан", callback_data="out_of_stock")
-    builder.button(text="◀️ Назад к списку аккаунтов", callback_data=SubcategoryCD(id=subcategory.id, page=page))
+    builder.button(text="◀️ Назад к списку аккаунтов", callback_data=ProductCD(id=product.id, page=page))
     builder.adjust(1)
     return builder.as_markup()
 

@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import User, Subcategory, Account, TopUpTicket, TicketStatus, Category, Order, OrderStatus
+from bot.database.models import User, Subcategory, Product, Account, TopUpTicket, TicketStatus, Category, Order, OrderStatus
 from web.auth import AdminUser
 from web.dependencies import get_db
 
@@ -77,14 +77,14 @@ async def dashboard_view(
     )
     recent_sold = list(recent_sold_res.scalars().all())
 
-    # Subcategories with stock counts
-    subcats_res = await session.execute(select(Subcategory).order_by(Subcategory.name))
-    all_subcats = list(subcats_res.scalars().all())
+    # Products with stock counts
+    prods_res = await session.execute(select(Product).order_by(Product.name))
+    all_prods = list(prods_res.scalars().all())
 
     counts_res = await session.execute(
-        select(Account.subcategory_id, func.count(Account.id))
+        select(Account.product_id, func.count(Account.id))
         .where(Account.is_sold == False)
-        .group_by(Account.subcategory_id)
+        .group_by(Account.product_id)
     )
     stock_counts = dict(counts_res.all())
 
@@ -105,7 +105,7 @@ async def dashboard_view(
             "recent_tickets": recent_tickets,
             "users_map": users_map,
             "recent_sold": recent_sold,
-            "products": all_subcats,
+            "products": all_prods,
             "stock_counts": stock_counts,
         }
     )

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Категории и Подкатегории{% endblock %}
+{% block title %}Каталог: Категории, Подкатегории и Товары{% endblock %}
 
 {% block content %}
 <div class="space-y-8">
@@ -9,34 +9,41 @@
         <div>
             <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
                 <i class="fa-solid fa-layer-group text-indigo-400"></i>
-                <span>Категории и Подкатегории</span>
+                <span>Каталог товаров</span>
             </h2>
-            <p class="text-sm text-slate-400 mt-0.5">Структура каталога магазина: Категория &rarr; Подкатегория &rarr; Товар (Аккаунты)</p>
+            <p class="text-sm text-slate-400 mt-0.5">3 уровня структуры: Категория &rarr; Подкатегория &rarr; Товар (аккаунты загружаются в Товар)</p>
         </div>
 
-        <div class="flex items-center space-x-2.5">
-            <button onclick="openModal('add-category-modal')" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl border border-slate-700 transition-all">
-                <i class="fa-solid fa-folder-plus text-xs"></i>
+        <div class="flex flex-wrap items-center gap-2">
+            <button onclick="openModal('add-category-modal')" class="inline-flex items-center space-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition-all">
+                <i class="fa-solid fa-folder-plus"></i>
                 <span>+ Категория</span>
             </button>
-            <button onclick="openModal('add-subcategory-modal')" class="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
-                <i class="fa-solid fa-plus text-xs"></i>
+            <button onclick="openModal('add-subcategory-modal')" class="inline-flex items-center space-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition-all">
+                <i class="fa-solid fa-folder-tree"></i>
                 <span>+ Подкатегория</span>
+            </button>
+            <button onclick="openModal('add-product-modal')" class="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
+                <i class="fa-solid fa-plus"></i>
+                <span>+ Товар</span>
             </button>
         </div>
     </div>
 
-    <!-- Categories Section -->
-    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-sm">
-        <h3 class="text-base font-semibold text-white mb-4 flex items-center space-x-2">
-            <i class="fa-solid fa-folder-open text-indigo-400"></i>
-            <span>Категории магазина</span>
+    <!-- Section 1: Categories -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm">
+        <h3 class="text-sm font-semibold text-white mb-3 flex items-center justify-between">
+            <span class="flex items-center space-x-2">
+                <i class="fa-regular fa-folder text-indigo-400"></i>
+                <span>1. Категории магазина</span>
+            </span>
+            <span class="text-xs text-slate-500">Всего: {{ categories | length }}</span>
         </h3>
 
         {% if categories %}
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {% for cat in categories %}
-            <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between">
+            <div class="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between">
                 <div>
                     <h4 class="font-medium text-white text-sm flex items-center space-x-2">
                         <i class="fa-regular fa-folder text-indigo-400 text-xs"></i>
@@ -44,7 +51,7 @@
                     </h4>
                     <p class="text-xs text-slate-400 mt-0.5">{{ cat.subcategories | length }} подкатегорий</p>
                 </div>
-                <form method="POST" action="/products/categories/{{ cat.id }}/delete" onsubmit="return confirm('Удалить категорию «{{ cat.name }}» и все ее подкатегории с товарами?')">
+                <form method="POST" action="/products/categories/{{ cat.id }}/delete" onsubmit="return confirm('Удалить категорию «{{ cat.name }}» и всё её содержимое?')">
                     <button type="submit" title="Удалить категорию" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
                         <i class="fa-solid fa-trash-can text-sm"></i>
                     </button>
@@ -53,18 +60,55 @@
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-sm text-slate-500 text-center py-4">Категорий пока нет. Нажмите «+ Категория» для создания.</p>
+        <p class="text-xs text-slate-500 text-center py-3">Категорий пока нет. Нажмите «+ Категория» для создания.</p>
         {% endif %}
     </div>
 
-    <!-- Subcategories Section -->
+    <!-- Section 2: Subcategories -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm">
+        <h3 class="text-sm font-semibold text-white mb-3 flex items-center justify-between">
+            <span class="flex items-center space-x-2">
+                <i class="fa-solid fa-folder-tree text-indigo-400"></i>
+                <span>2. Подкатегории</span>
+            </span>
+            <span class="text-xs text-slate-500">Всего: {{ subcategories | length }}</span>
+        </h3>
+
+        {% if subcategories %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for sub in subcategories %}
+            <div class="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between">
+                <div>
+                    <h4 class="font-medium text-white text-sm">{{ sub.name }}</h4>
+                    <p class="text-xs text-indigo-400 mt-0.5">В категории: {{ sub.category.name if sub.category else '—' }}</p>
+                    <p class="text-[11px] text-slate-400">{{ sub.products | length }} товаров</p>
+                </div>
+                <div class="flex items-center space-x-1">
+                    <button type="button" onclick="openEditSubcategoryModal({{ sub.id }}, {{ sub.category_id }}, '{{ sub.name | replace("'", "\\'") }}')" title="Редактировать" class="text-slate-400 hover:text-white p-1.5 transition-colors">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                    <form method="POST" action="/products/subcategories/{{ sub.id }}/delete" onsubmit="return confirm('Удалить подкатегорию «{{ sub.name }}» и связанные товары?')">
+                        <button type="submit" title="Удалить подкатегорию" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
+                            <i class="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-xs text-slate-500 text-center py-3">Подкатегорий пока нет. Нажмите «+ Подкатегория» для создания.</p>
+        {% endif %}
+    </div>
+
+    <!-- Section 3: Products Table (Товары с ценой и остатком) -->
     <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+        <div class="p-5 border-b border-slate-800 flex items-center justify-between">
             <h3 class="text-base font-semibold text-white flex items-center space-x-2">
                 <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
-                <span>Список подкатегорий каталога</span>
+                <span>3. Список товаров (Товары на витрине)</span>
             </h3>
-            <span class="text-xs text-slate-400">Всего подкатегорий: {{ subcategories | length }}</span>
+            <span class="text-xs text-slate-400">Всего товаров: {{ products | length }}</span>
         </div>
 
         <div class="overflow-x-auto">
@@ -72,32 +116,32 @@
                 <thead>
                     <tr class="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 bg-slate-950/50">
                         <th class="py-3 px-4">ID</th>
-                        <th class="py-3 px-4">Подкатегория</th>
-                        <th class="py-3 px-4">Родительская категория</th>
+                        <th class="py-3 px-4">Товар</th>
+                        <th class="py-3 px-4">Категория / Подкатегория</th>
                         <th class="py-3 px-4">Цена</th>
-                        <th class="py-3 px-4">В наличии (Товары)</th>
+                        <th class="py-3 px-4">В наличии (Склад)</th>
                         <th class="py-3 px-4">Продано</th>
                         <th class="py-3 px-4">Описание</th>
                         <th class="py-3 px-4 text-right">Действия</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/60 text-slate-300">
-                    {% if subcategories %}
-                        {% for sub in subcategories %}
-                        {% set stock = stock_counts.get(sub.id, 0) %}
-                        {% set sold = sold_counts.get(sub.id, 0) %}
+                    {% if products %}
+                        {% for prod in products %}
+                        {% set stock = stock_counts.get(prod.id, 0) %}
+                        {% set sold = sold_counts.get(prod.id, 0) %}
                         <tr class="hover:bg-slate-800/40 transition-colors">
-                            <td class="py-3.5 px-4 font-mono text-xs text-slate-500">#{{ sub.id }}</td>
-                            <td class="py-3.5 px-4 font-semibold text-white">{{ sub.name }}</td>
+                            <td class="py-3.5 px-4 font-mono text-xs text-slate-500">#{{ prod.id }}</td>
+                            <td class="py-3.5 px-4 font-semibold text-white">{{ prod.name }}</td>
                             <td class="py-3.5 px-4 text-xs">
                                 <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
-                                    {{ sub.category.name if sub.category else '—' }}
+                                    {{ prod.subcategory.category.name if prod.subcategory and prod.subcategory.category else '—' }} &rarr; {{ prod.subcategory.name if prod.subcategory else '—' }}
                                 </span>
                             </td>
-                            <td class="py-3.5 px-4 font-bold text-emerald-400">{{ sub.price | currency }}</td>
+                            <td class="py-3.5 px-4 font-bold text-emerald-400">${{ "%.2f"|format(prod.price) }}</td>
                             <td class="py-3.5 px-4 text-xs font-semibold">
                                 {% if stock > 0 %}
-                                <a href="/accounts?subcategory_id={{ sub.id }}&status_filter=available" class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors">
+                                <a href="/accounts?product_id={{ prod.id }}&status_filter=available" class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors">
                                     {{ stock }} акк.
                                 </a>
                                 {% else %}
@@ -107,24 +151,27 @@
                                 {% endif %}
                             </td>
                             <td class="py-3.5 px-4 text-xs text-slate-400">
-                                <a href="/accounts?subcategory_id={{ sub.id }}&status_filter=sold" class="hover:underline">
+                                <a href="/accounts?product_id={{ prod.id }}&status_filter=sold" class="hover:underline">
                                     {{ sold }} акк.
                                 </a>
                             </td>
-                            <td class="py-3.5 px-4 text-xs text-slate-400 max-w-xs truncate" title="{{ sub.description }}">
-                                {{ sub.description or '—' }}
+                            <td class="py-3.5 px-4 text-xs text-slate-400 max-w-xs truncate" title="{{ prod.description }}">
+                                {{ prod.description or '—' }}
                             </td>
                             <td class="py-3.5 px-4 text-right">
-                                <div class="inline-flex items-center space-x-2">
+                                <div class="inline-flex items-center space-x-1.5">
+                                    <a href="/accounts?product_id={{ prod.id }}" title="Загрузить аккаунты" class="px-2 py-1 rounded-lg bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 text-xs font-medium transition-colors">
+                                        <i class="fa-solid fa-file-arrow-up mr-1"></i> Аккаунты
+                                    </a>
                                     <button type="button"
-                                        onclick="openEditSubcategoryModal({{ sub.id }}, {{ sub.category_id }}, '{{ sub.name | replace("'", "\\'") }}', {{ sub.price }}, '{{ (sub.description or '') | replace("'", "\\'") | replace("\n", "\\n") }}')"
-                                        title="Редактировать"
-                                        class="text-slate-400 hover:text-indigo-400 p-1.5 transition-colors">
-                                        <i class="fa-solid fa-pen-to-square text-sm"></i>
+                                        onclick="openEditProductModal({{ prod.id }}, {{ prod.subcategory_id }}, '{{ prod.name | replace("'", "\\'") }}', {{ prod.price }}, '{{ (prod.description or '') | replace("'", "\\'") | replace("\n", "\\n") }}')"
+                                        title="Редактировать товар"
+                                        class="text-slate-400 hover:text-white p-1.5 transition-colors">
+                                        <i class="fa-solid fa-pen-to-square text-xs"></i>
                                     </button>
-                                    <form method="POST" action="/products/subcategories/{{ sub.id }}/delete" onsubmit="return confirm('Удалить подкатегорию «{{ sub.name }}» и все ее аккаунты?')" class="inline">
-                                        <button type="submit" title="Удалить" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
-                                            <i class="fa-solid fa-trash-can text-sm"></i>
+                                    <form method="POST" action="/products/{{ prod.id }}/delete" onsubmit="return confirm('Удалить товар «{{ prod.name }}» и все его аккаунты?')">
+                                        <button type="submit" title="Удалить товар" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
+                                            <i class="fa-solid fa-trash-can text-xs"></i>
                                         </button>
                                     </form>
                                 </div>
@@ -133,8 +180,8 @@
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="8" class="py-12 text-center text-slate-500 text-sm">
-                                Подкатегорий пока нет. Нажмите «+ Подкатегория» для добавления.
+                            <td colspan="8" class="py-8 text-center text-slate-500 text-sm">
+                                Товаров пока нет. Создайте подкатегорию, а затем нажмите «+ Товар».
                             </td>
                         </tr>
                     {% endif %}
@@ -150,22 +197,22 @@
         <button onclick="closeModal('add-category-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
             <i class="fa-solid fa-xmark text-lg"></i>
         </button>
-        <h3 class="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-4">
             <i class="fa-solid fa-folder-plus text-indigo-400"></i>
             <span>Новая категория</span>
         </h3>
         <form method="POST" action="/products/categories/create" class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название категории *</label>
-                <input type="text" name="name" required placeholder="Например: VPN & Proxy, Telegram, Discord..."
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="text" name="name" required placeholder="Например: Банки США или VPN"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div class="pt-2 flex justify-end space-x-2">
                 <button type="button" onclick="closeModal('add-category-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
                     Отмена
                 </button>
                 <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
-                    Создать
+                    Создать категорию
                 </button>
             </div>
         </form>
@@ -174,55 +221,35 @@
 
 <!-- ================= MODAL: ADD SUBCATEGORY ================= -->
 <div id="add-subcategory-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
         <button onclick="closeModal('add-subcategory-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
             <i class="fa-solid fa-xmark text-lg"></i>
         </button>
-        <h3 class="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-            <i class="fa-solid fa-plus text-indigo-400"></i>
-            <span>Добавить новую подкатегорию</span>
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-4">
+            <i class="fa-solid fa-folder-tree text-indigo-400"></i>
+            <span>Новая подкатегория</span>
         </h3>
         <form method="POST" action="/products/subcategories/create" class="space-y-4">
-            {% if not categories %}
-            <div class="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center space-x-2">
-                <i class="fa-solid fa-circle-exclamation text-sm"></i>
-                <span>Сначала создайте категорию (кнопка «+ Категория» вверху), затем добавляйте подкатегории.</span>
-            </div>
-            {% endif %}
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Категория *</label>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Родительская категория *</label>
                 <select name="category_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="" disabled selected>Выберите категорию...</option>
-                    {% for c in categories %}
-                    <option value="{{ c.id }}">{{ c.name }}</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}">{{ cat.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название подкатегории *</label>
-                <input type="text" name="name" required placeholder="Например: USA 2024, Автореги, VLESS Reality..."
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="text" name="name" required placeholder="Например: Truist или Chase"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
-
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена за 1 аккаунт ($) *</label>
-                <input type="number" step="0.01" min="0" name="price" required placeholder="4.99"
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Описание</label>
-                <textarea name="description" rows="3" placeholder="Подробное описание подкатегории для клиентов..."
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
-            </div>
-
             <div class="pt-2 flex justify-end space-x-2">
                 <button type="button" onclick="closeModal('add-subcategory-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
                     Отмена
                 </button>
                 <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
-                    Сохранить подкатегорию
+                    Создать подкатегорию
                 </button>
             </div>
         </form>
@@ -231,47 +258,132 @@
 
 <!-- ================= MODAL: EDIT SUBCATEGORY ================= -->
 <div id="edit-subcategory-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
         <button onclick="closeModal('edit-subcategory-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
             <i class="fa-solid fa-xmark text-lg"></i>
         </button>
-        <h3 class="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-4">
             <i class="fa-solid fa-pen-to-square text-indigo-400"></i>
             <span>Редактировать подкатегорию</span>
         </h3>
         <form id="edit-subcategory-form" method="POST" action="" class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Категория *</label>
-                <select id="edit-category-id" name="category_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    {% for c in categories %}
-                    <option value="{{ c.id }}">{{ c.name }}</option>
+                <select id="edit-subcat-category" name="category_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}">{{ cat.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название подкатегории *</label>
-                <input type="text" id="edit-name" name="name" required
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название *</label>
+                <input type="text" id="edit-subcat-name" name="name" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
-
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена за 1 аккаунт ($) *</label>
-                <input type="number" step="0.01" min="0" id="edit-price" name="price" required
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Описание</label>
-                <textarea id="edit-description" name="description" rows="3"
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
-            </div>
-
             <div class="pt-2 flex justify-end space-x-2">
                 <button type="button" onclick="closeModal('edit-subcategory-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
                     Отмена
                 </button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl">
+                    Сохранить изменения
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ================= MODAL: ADD PRODUCT (ТОВАР) ================= -->
+<div id="add-product-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+        <button onclick="closeModal('add-product-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-4">
+            <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
+            <span>Добавить новый товар</span>
+        </h3>
+        <form method="POST" action="/products/create" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Родительская подкатегория *</label>
+                <select name="subcategory_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="" disabled selected>Выберите подкатегорию...</option>
+                    {% for sub in subcategories %}
+                    <option value="{{ sub.id }}">{{ sub.category.name if sub.category else '' }} &rarr; {{ sub.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название товара *</label>
+                    <input type="text" name="name" required placeholder="Например: 7 Дней или 15 Дней"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена в USDT ($) *</label>
+                    <input type="number" step="0.01" min="0" name="price" required placeholder="100.00"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Описание товара</label>
+                <textarea name="description" rows="3" placeholder="Краткое описание товара для покупателя в боте..."
+                    class="w-full p-3 text-xs rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div class="pt-2 flex justify-end space-x-2">
+                <button type="button" onclick="closeModal('add-product-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+                    Отмена
+                </button>
                 <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
+                    Создать товар
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ================= MODAL: EDIT PRODUCT (ТОВАР) ================= -->
+<div id="edit-product-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+        <button onclick="closeModal('edit-product-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-4">
+            <i class="fa-solid fa-pen-to-square text-indigo-400"></i>
+            <span>Редактировать товар</span>
+        </h3>
+        <form id="edit-product-form" method="POST" action="" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Подкатегория *</label>
+                <select id="edit-prod-subcat" name="subcategory_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    {% for sub in subcategories %}
+                    <option value="{{ sub.id }}">{{ sub.category.name if sub.category else '' }} &rarr; {{ sub.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название *</label>
+                    <input type="text" id="edit-prod-name" name="name" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена ($) *</label>
+                    <input type="number" step="0.01" min="0" id="edit-prod-price" name="price" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Описание</label>
+                <textarea id="edit-prod-desc" name="description" rows="3" class="w-full p-3 text-xs rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div class="pt-2 flex justify-end space-x-2">
+                <button type="button" onclick="closeModal('edit-product-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+                    Отмена
+                </button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl">
                     Сохранить изменения
                 </button>
             </div>
@@ -282,13 +394,20 @@
 
 {% block scripts %}
 <script>
-    function openEditSubcategoryModal(id, categoryId, name, price, description) {
+    function openEditSubcategoryModal(id, categoryId, name) {
         document.getElementById('edit-subcategory-form').action = '/products/subcategories/' + id + '/edit';
-        document.getElementById('edit-category-id').value = categoryId;
-        document.getElementById('edit-name').value = name;
-        document.getElementById('edit-price').value = price;
-        document.getElementById('edit-description').value = description;
+        document.getElementById('edit-subcat-category').value = categoryId;
+        document.getElementById('edit-subcat-name').value = name;
         openModal('edit-subcategory-modal');
+    }
+
+    function openEditProductModal(id, subcategoryId, name, price, description) {
+        document.getElementById('edit-product-form').action = '/products/' + id + '/edit';
+        document.getElementById('edit-prod-subcat').value = subcategoryId;
+        document.getElementById('edit-prod-name').value = name;
+        document.getElementById('edit-prod-price').value = price;
+        document.getElementById('edit-prod-desc').value = description;
+        openModal('edit-product-modal');
     }
 </script>
 {% endblock %}

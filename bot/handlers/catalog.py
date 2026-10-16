@@ -6,10 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from bot.config import config
-from bot.database.models import Category, Subcategory, Account, User, Order, OrderStatus
+from bot.database.models import Category, Subcategory, Product, Account, User, Order, OrderStatus
 from bot.keyboards.callbacks import (
     CategoryCD,
     SubcategoryCD,
+    ProductCD,
     AccountCD,
     BuyAccountCD,
     FastBuyCD,
@@ -18,6 +19,7 @@ from bot.keyboards.callbacks import (
 from bot.keyboards.inline import (
     get_categories_kb,
     get_subcategories_kb,
+    get_products_kb,
     get_accounts_kb,
     get_account_card_kb,
     get_order_detail_kb,
@@ -77,9 +79,9 @@ async def show_subcategories(
 
     subcat_ids = [s.id for s in subcategories]
     counts_res = await session.execute(
-        select(Account.subcategory_id, func.count(Account.id))
-        .where(Account.subcategory_id.in_(subcat_ids), Account.is_sold == False)
-        .group_by(Account.subcategory_id)
+        select(Product.subcategory_id, func.count(Product.id))
+        .where(Product.subcategory_id.in_(subcat_ids))
+        .group_by(Product.subcategory_id)
     )
     counts = dict(counts_res.all())
 
@@ -89,7 +91,7 @@ async def show_subcategories(
     )
 
 @catalog_router.callback_query(SubcategoryCD.filter())
-async def show_accounts_in_subcategory(
+async def show_products(
     callback: CallbackQuery,
     callback_data: SubcategoryCD,
     session: AsyncSession
@@ -100,10 +102,49 @@ async def show_accounts_in_subcategory(
         await callback.answer("Подкатегория не найдена.", show_alert=True)
         return
 
+    category = await session.get(Category, subcategory.category_id)
+
+    # Fetch products in this subcategory
+    prods_res = await session.execute(
+        select(Product)
+        .where(Product.subcategory_id == subcategory.id)
+        .order_by(Product.name)
+    )
+    products = list(prods_res.scalars().all())
+
+    if not products:
+        await callback.answer("В этой подкатегории пока нет товаров.", show_alert=True)
+        return
+
+    prod_ids = [p.id for p in products]
+    counts_res = await session.execute(
+        select(Account.product_id, func.count(Account.id))
+        .where(Account.product_id.in_(prod_ids), Account.is_sold == False)
+        .group_by(Account.product_id)
+    )
+    counts = dict(counts_res.all())
+
+    await callback.message.edit_text(
+        f"📂 <b>{subcategory.name}</b>\nКатегория: {category.name if category else '—'}\n\nВыберите нужный товар:",
+        reply_markup=get_products_kb(products, subcategory.category_id, counts)
+    )
+
+@catalog_router.callback_query(ProductCD.filter())
+async def show_accounts_in_product(
+    callback: CallbackQuery,
+    callback_data: ProductCD,
+    session: AsyncSession
+):
+    await callback.answer()
+    product = await session.get(Product, callback_data.id)
+    if not product:
+        await callback.answer("Товар не найден.", show_alert=True)
+        return
+
     # Total unsold accounts
     total_count = await session.scalar(
         select(func.count(Account.id)).where(
-            Account.subcategory_id == subcategory.id,
+            Account.product_id == product.id,
             Account.is_sold == False
         )
     ) or 0
@@ -116,7 +157,7 @@ async def show_accounts_in_subcategory(
     accounts_res = await session.execute(
         select(Account)
         .where(
-            Account.subcategory_id == subcategory.id,
+            Account.product_id == product.id,
             Account.is_sold == False
         )
         .order_by(Account.created_at.desc(), Account.id.desc())
@@ -125,22 +166,22 @@ async def show_accounts_in_subcategory(
     )
     accounts = list(accounts_res.scalars().all())
 
-    desc_text = f"\n📝 <i>{subcategory.description}</i>\n" if subcategory.description else ""
+    desc_text = f"\n📝 <i>{product.description}</i>\n" if product.description else ""
     stock_text = f"<b>{total_count} шт.</b>" if total_count > 0 else "<b>Нет в наличии</b>"
 
     text = (
-        f"📂 <b>{subcategory.name}</b>\n"
+        f"🏷 <b>Товар: {product.name}</b>\n"
         f"{desc_text}\n"
-        f"💵 <b>Цена:</b> ${subcategory.price:.2f}\n"
-        f"📦 <b>В наличии:</b> {stock_text}\n\n"
-        f"👇 <i>Выберите аккаунт из списка ниже (свежие первыми) или нажмите быструю покупку:</i>"
+        f"💵 <b>Цена:</b> ${product.price:.2f}\n"
+        f"📦 <b>В наличии на складе:</b> {stock_text}\n\n"
+        f"👇 <i>Нажмите «Купить любой свежий» для моментальной покупки или выберите конкретный аккаунт:</i>"
     )
 
     await callback.message.edit_text(
         text,
         reply_markup=get_accounts_kb(
             accounts=accounts,
-            subcategory=subcategory,
+            product=product,
             page=page,
             total_pages=total_pages,
             total_count=total_count
@@ -159,20 +200,20 @@ async def show_account_card(
         await callback.answer("Аккаунт не найден.", show_alert=True)
         return
 
-    subcategory = await session.get(Subcategory, account.subcategory_id)
+    product = await session.get(Product, account.product_id)
     created_str = account.created_at.strftime("%d.%m.%Y %H:%M") if account.created_at else "—"
 
     text = (
-        f"🏷 <b>Товар:</b> <code>{account.data}</code>\n"
-        f"📂 <b>Подкатегория:</b> {subcategory.name}\n"
-        f"💵 <b>Цена:</b> ${subcategory.price:.2f}\n"
-        f"📅 <b>Добавлен:</b> {created_str}\n"
+        f"👤 <b>Аккаунт:</b> <code>{account.data}</code>\n"
+        f"🏷 <b>Товар:</b> {product.name}\n"
+        f"💵 <b>Цена:</b> ${product.price:.2f}\n"
+        f"📅 <b>Добавлен на витрину:</b> {created_str}\n"
         f"📊 <b>Статус:</b> {'🟢 В наличии' if not account.is_sold else '🔴 Продан'}"
     )
 
     await callback.message.edit_text(
         text,
-        reply_markup=get_account_card_kb(account, subcategory)
+        reply_markup=get_account_card_kb(account, product)
     )
 
 @catalog_router.callback_query(BuyAccountCD.filter())
@@ -201,8 +242,8 @@ async def buy_specific_account(
         await callback.answer("❌ Этот аккаунт уже был куплен другим пользователем.", show_alert=True)
         return
 
-    subcategory = await session.get(Subcategory, account.subcategory_id)
-    price = float(subcategory.price)
+    product = await session.get(Product, account.product_id)
+    price = float(product.price)
 
     if float(user.balance) < price:
         await callback.answer(
@@ -222,7 +263,7 @@ async def buy_specific_account(
     order = Order(
         user_id=user.tg_id,
         account_id=account.id,
-        subcategory_id=subcategory.id,
+        product_id=product.id,
         amount=price,
         status=OrderStatus.HOLD,
         hold_until=hold_until,
@@ -233,13 +274,13 @@ async def buy_specific_account(
     hold_str = hold_until.strftime("%d.%m.%Y %H:%M UTC")
     success_text = (
         f"🎉 <b>Успешная покупка заказа #ORDER-{order.id}!</b>\n\n"
-        f"📂 <b>Подкатегория:</b> {subcategory.name}\n"
+        f"🏷 <b>Товар:</b> {product.name}\n"
         f"💵 <b>Списано:</b> ${price:.2f}\n"
         f"💰 <b>Остаток баланса:</b> ${float(user.balance):.2f}\n\n"
         f"📦 <b>Данные аккаунта:</b>\n"
         f"<code>{account.data}</code>\n\n"
         f"⏳ <b>Гарантия на проверку: 24 часа</b> (до {hold_str}).\n"
-        f"Средства заморожены на 24ч. В случае проблем вы можете открыть диспут по кнопке ниже."
+        f"В случае проблем вы можете открыть диспут по кнопке ниже."
     )
 
     await callback.message.answer(
@@ -247,7 +288,7 @@ async def buy_specific_account(
         reply_markup=get_order_detail_kb(order, can_dispute=True)
     )
 
-    # Notify admin about new hold order
+    # Notify admin
     try:
         admin_alert = (
             f"💰 <b>Новый заказ #ORDER-{order.id} на ${price:.2f}!</b>\n\n"
@@ -272,12 +313,12 @@ async def buy_fast_freshest_account(
         await callback.answer("Ошибка: пользователь не найден.", show_alert=True)
         return
 
-    subcategory = await session.get(Subcategory, callback_data.subcategory_id)
-    if not subcategory:
-        await callback.answer("Подкатегория не найдена.", show_alert=True)
+    product = await session.get(Product, callback_data.product_id)
+    if not product:
+        await callback.answer("Товар не найден.", show_alert=True)
         return
 
-    price = float(subcategory.price)
+    price = float(product.price)
     if float(user.balance) < price:
         await callback.answer(
             f"❌ Недостаточно средств на балансе. Цена: ${price:.2f}, Ваш баланс: ${float(user.balance):.2f}.",
@@ -288,7 +329,7 @@ async def buy_fast_freshest_account(
     # Pick the freshest available account atomically
     stmt = (
         select(Account)
-        .where(Account.subcategory_id == subcategory.id, Account.is_sold == False)
+        .where(Account.product_id == product.id, Account.is_sold == False)
         .order_by(Account.created_at.desc(), Account.id.desc())
         .with_for_update(skip_locked=True)
         .limit(1)
@@ -297,7 +338,7 @@ async def buy_fast_freshest_account(
     account = result.scalar_one_or_none()
 
     if not account:
-        await callback.answer("❌ На складе больше нет доступных аккаунтов.", show_alert=True)
+        await callback.answer("❌ К сожалению, все аккаунты этого товара раскуплены.", show_alert=True)
         return
 
     user.balance = float(user.balance) - price
@@ -305,12 +346,11 @@ async def buy_fast_freshest_account(
     account.sold_to_user_id = user.tg_id
     account.sold_at = datetime.utcnow()
 
-    # Create Order with 24-hour hold
     hold_until = datetime.utcnow() + timedelta(hours=24)
     order = Order(
         user_id=user.tg_id,
         account_id=account.id,
-        subcategory_id=subcategory.id,
+        product_id=product.id,
         amount=price,
         status=OrderStatus.HOLD,
         hold_until=hold_until,
@@ -320,14 +360,13 @@ async def buy_fast_freshest_account(
 
     hold_str = hold_until.strftime("%d.%m.%Y %H:%M UTC")
     success_text = (
-        f"⚡️ <b>Быстрая покупка заказа #ORDER-{order.id} успешна!</b>\n\n"
-        f"📂 <b>Подкатегория:</b> {subcategory.name}\n"
+        f"⚡️ <b>Быстрая покупка #ORDER-{order.id}!</b>\n\n"
+        f"🏷 <b>Товар:</b> {product.name}\n"
         f"💵 <b>Списано:</b> ${price:.2f}\n"
         f"💰 <b>Остаток баланса:</b> ${float(user.balance):.2f}\n\n"
-        f"📦 <b>Данные аккаунта:</b>\n"
+        f"📦 <b>Ваш свежий аккаунт:</b>\n"
         f"<code>{account.data}</code>\n\n"
-        f"⏳ <b>Гарантия на проверку: 24 часа</b> (до {hold_str}).\n"
-        f"Средства заморожены на 24ч. В случае проблем вы можете открыть диспут по кнопке ниже."
+        f"⏳ <b>Гарантия на проверку: 24 часа</b> (до {hold_str})."
     )
 
     await callback.message.answer(
@@ -337,7 +376,7 @@ async def buy_fast_freshest_account(
 
     try:
         admin_alert = (
-            f"💰 <b>Новый заказ #ORDER-{order.id} на ${price:.2f}!</b>\n\n"
+            f"⚡️ <b>Быстрая покупка #ORDER-{order.id} на ${price:.2f}!</b>\n\n"
             f"Покупатель: @{user.username or '—'} (<code>{user.tg_id}</code>)\n"
             f"Товар: <code>{account.data}</code>\n"
             f"Статус: ⏳ <b>Заморожено на 24 часа</b> (до {hold_str})"

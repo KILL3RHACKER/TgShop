@@ -5,6 +5,9 @@ class CategoryCD(CallbackData, prefix="cat"):
 
 class SubcategoryCD(CallbackData, prefix="subcat"):
     id: int
+
+class ProductCD(CallbackData, prefix="prod"):
+    id: int
     page: int = 1
 
 class AccountCD(CallbackData, prefix="acc"):
@@ -14,7 +17,7 @@ class BuyAccountCD(CallbackData, prefix="buy_acc"):
     id: int
 
 class FastBuyCD(CallbackData, prefix="fast_buy"):
-    subcategory_id: int
+    product_id: int
 
 class TicketActionCD(CallbackData, prefix="tck"):
     id: int
