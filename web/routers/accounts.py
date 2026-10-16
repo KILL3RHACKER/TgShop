@@ -14,6 +14,7 @@ from web.services import (
     parse_archive_by_files,
     add_accounts_bulk,
     add_accounts_auto_age_tiers,
+    add_accounts_to_category_auto_age,
     sync_all_accounts_age_tiers,
     delete_accounts_by_list,
     get_or_create_age_tier_products,
@@ -187,85 +188,97 @@ async def upload_archive_accounts(
     session: AsyncSession = Depends(get_db),
 ):
     form = await request.form()
-    archive_file: UploadFile = form.get("archive_file") or form.get("zip_file")
+    
+    # Поддержка выбора нескольких архивов сразу (.zip / .rar)
+    raw_files = form.getlist("archive_files")
+    if not raw_files:
+        single = form.get("archive_file") or form.get("zip_file")
+        raw_files = [single] if single else []
 
-    if not archive_file:
-        msg = quote("Файл архива не загружен")
+    uploaded_files: list[UploadFile] = [
+        f for f in raw_files
+        if isinstance(f, UploadFile) and f.filename and f.filename.strip()
+    ]
+
+    if not uploaded_files:
+        msg = quote("Файлы архивов не загружены")
         return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
-    filename = archive_file.filename or ""
-    fn_lower = filename.lower()
-    if not (fn_lower.endswith(".zip") or fn_lower.endswith(".rar")):
+    valid_files = [
+        f for f in uploaded_files
+        if f.filename.lower().endswith((".zip", ".rar"))
+    ]
+
+    if not valid_files:
         msg = quote("Поддерживаются только архивы .zip и .rar")
         return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
     try:
-        content = await archive_file.read()
+        all_parsed_accounts = []
+        seen = set()
+        total_files_count = 0
+
+        for f in valid_files:
+            content = await f.read()
+            parsed_accounts, files_count = parse_accounts_from_archive(f.filename, content)
+            total_files_count += files_count
+            for acc in parsed_accounts:
+                key = acc["data"].upper()
+                if key not in seen:
+                    seen.add(key)
+                    all_parsed_accounts.append(acc)
+
+        if not all_parsed_accounts:
+            msg = quote(f"В загруженных архивах ({len(valid_files)} шт.) не найдено подходящих аккаунтов")
+            return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=warning", status_code=status.HTTP_303_SEE_OTHER)
 
         # 1. Specific product upload
         if upload_mode == "specific_product" and product_id and product_id > 0:
-            parsed_accounts, files_count = parse_accounts_from_archive(filename, content)
-            if not parsed_accounts:
-                msg = quote(f"В архиве {filename} не найдено подходящих строк аккаунтов")
-                return RedirectResponse(
-                    url=f"/accounts?product_id={product_id}&msg={msg}&msg_type=warning",
-                    status_code=status.HTTP_303_SEE_OTHER,
-                )
-
-            added = await add_accounts_bulk(session, product_id, parsed_accounts)
-            msg = quote(f"Успешно импортировано {added} аккаунтов в товар из архива {filename}")
+            added = await add_accounts_bulk(session, product_id, all_parsed_accounts)
+            msg = quote(f"Успешно импортировано {added} аккаунтов в товар из {len(valid_files)} архива(ов)")
             return RedirectResponse(
                 url=f"/accounts?product_id={product_id}&msg={msg}&msg_type=success",
                 status_code=status.HTTP_303_SEE_OTHER,
             )
 
-        # 2. Upload into Category / Subcategory with Auto-Age sorting ("больше 7, 15, 30 Дней сами сортируются")
-        if upload_mode == "auto_age" or category_id or subcategory_id:
-            # Determine target subcategory_id
-            target_subcat_id = subcategory_id
-            if not target_subcat_id and category_id:
-                # Find or create subcategory in this category
-                sub_res = await session.execute(
-                    select(Subcategory).where(Subcategory.category_id == category_id).limit(1)
-                )
-                subcat = sub_res.scalar_one_or_none()
-                if not subcat:
-                    cat = await session.get(Category, category_id)
-                    cat_name = cat.name if cat else "Основная"
-                    subcat = Subcategory(category_id=category_id, name=cat_name)
-                    session.add(subcat)
-                    await session.commit()
-                    await session.refresh(subcat)
-                target_subcat_id = subcat.id
-
-            if not target_subcat_id:
-                # Fallback: find any subcategory or create one
-                any_sub = await session.scalar(select(Subcategory).limit(1))
-                if any_sub:
-                    target_subcat_id = any_sub.id
-                else:
-                    # Create default category and subcategory
-                    default_cat = Category(name="Аккаунты USA")
-                    session.add(default_cat)
-                    await session.commit()
-                    default_sub = Subcategory(category_id=default_cat.id, name="Общая база")
-                    session.add(default_sub)
-                    await session.commit()
-                    target_subcat_id = default_sub.id
-
-            parsed_accounts, files_count = parse_accounts_from_archive(filename, content)
-            if not parsed_accounts:
-                msg = quote(f"В архиве {filename} не найдено подходящих строк аккаунтов (ST | NAME SURNAME | DD.MM)")
-                return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=warning", status_code=status.HTTP_303_SEE_OTHER)
-
-            stats = await add_accounts_auto_age_tiers(session, target_subcat_id, parsed_accounts)
+        # 2. Upload into Category (Оставлена только Категория)
+        if category_id and category_id > 0:
+            stats = await add_accounts_to_category_auto_age(session, category_id, all_parsed_accounts)
             total_added = sum(stats.values())
             details_str = ", ".join(f"{k}: {v} шт." for k, v in stats.items())
-            msg = quote(f"🎉 Загружено {total_added} аккаунтов в категорию! Авто-сортировка по отлёжке: {details_str}")
+            msg = quote(f"🎉 Загружено {total_added} аккаунтов из {len(valid_files)} архива(ов)! Авто-сортировка: {details_str}")
             return RedirectResponse(
-                url=f"/accounts?subcategory_id={target_subcat_id}&msg={msg}&msg_type=success",
+                url=f"/accounts?category_id={category_id}&msg={msg}&msg_type=success",
                 status_code=status.HTTP_303_SEE_OTHER,
             )
+
+        # 3. Fallback: upload into Subcategory if passed
+        if subcategory_id and subcategory_id > 0:
+            stats = await add_accounts_auto_age_tiers(session, subcategory_id, all_parsed_accounts)
+            total_added = sum(stats.values())
+            details_str = ", ".join(f"{k}: {v} шт." for k, v in stats.items())
+            msg = quote(f"🎉 Загружено {total_added} аккаунтов! Авто-сортировка: {details_str}")
+            return RedirectResponse(
+                url=f"/accounts?subcategory_id={subcategory_id}&msg={msg}&msg_type=success",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
+        # 4. Fallback if no category: pick first category or create one
+        cat = await session.scalar(select(Category).limit(1))
+        if not cat:
+            cat = Category(name="Аккаунты USA")
+            session.add(cat)
+            await session.commit()
+            await session.refresh(cat)
+
+        stats = await add_accounts_to_category_auto_age(session, cat.id, all_parsed_accounts)
+        total_added = sum(stats.values())
+        details_str = ", ".join(f"{k}: {v} шт." for k, v in stats.items())
+        msg = quote(f"🎉 Загружено {total_added} аккаунтов в категорию «{cat.name}»! {details_str}")
+        return RedirectResponse(
+            url=f"/accounts?category_id={cat.id}&msg={msg}&msg_type=success",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
         # 3. Filename matching mode
         file_map, files_count = parse_archive_by_files(filename, content)

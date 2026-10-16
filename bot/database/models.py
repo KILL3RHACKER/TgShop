@@ -91,7 +91,7 @@ class Account(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
     state: Mapped[str] = mapped_column(String(16), default="US", index=True)  # Format: "CA", "NY"
     data: Mapped[str] = mapped_column(Text)  # Format: "ST | NAME SURNAME | DD.MM"
-    name: Mapped[str] = mapped_column(String(128), index=True)  # Format: "NAME SURNAME"
+    name: Mapped[str] = mapped_column(String(255), index=True)  # Format: "NAME SURNAME"
     date_info: Mapped[str] = mapped_column(String(32), index=True)  # Format: "DD.MM"
     registration_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     raw_data: Mapped[str | None] = mapped_column(Text, nullable=True)

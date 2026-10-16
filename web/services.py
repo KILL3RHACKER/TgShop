@@ -205,7 +205,16 @@ def extract_state_name_date(raw: str) -> tuple[str, str, str, date | None] | Non
     - Все данные после месяца строго отсекаются.
     """
     line = raw.strip()
-    if not line or line.startswith("#"):
+    if not line or len(line) < 3 or len(line) > 300 or line.startswith(("#", "//", "/*", "=", "-", "_", "[", "{")):
+        return None
+
+    # Skip lines that look like log labels or JSON or separators
+    lower = line.lower()
+    if any(lower.startswith(k) for k in [
+        "ssn:", "ssn ", "address:", "account number", "routing",
+        "saving", "checking", "balance:", "email:", "password:",
+        "phone:", "cookie:", "domain:", "host:", "user-agent:"
+    ]):
         return None
 
     # Find date component
@@ -296,14 +305,18 @@ def extract_state_name_date(raw: str) -> tuple[str, str, str, date | None] | Non
                 name = prefix
 
     clean_name = " ".join(name.split()).upper()
-    if not clean_name:
-        clean_name = "UNKNOWN"
+    if not clean_name or len(clean_name) > 80:
+        return None
+
+    # Ensure no JSON or forbidden code characters in name
+    if any(ch in clean_name for ch in "{}[]()<>=/\\@:;\""):
+        return None
 
     return state, clean_name, date_str, reg_date
 
 def parse_account_line(line: str) -> ParsedAccount | None:
     raw = line.strip()
-    if not raw or raw.startswith("#"):
+    if not raw or len(raw) < 5 or raw.startswith(("#", "//", "/*", "=", "-", "_", "[", "{")):
         return None
 
     extracted = extract_state_name_date(raw)
@@ -319,15 +332,70 @@ def parse_account_line(line: str) -> ParsedAccount | None:
             "registration_date": reg_date,
         }
 
-    # Fallback if no valid date found
-    clean_name = " ".join(raw.split()).upper()
+    return None
+
+def parse_account_from_log_block(block: str, fallback_name: str = "") -> ParsedAccount | None:
+    """
+    Парсит отдельный блок лога банковского аккаунта (содержит Name:, Address:, DOB:, cookies и т.д.).
+    Возвращает ParsedAccount, где raw_data содержит ПОЛНЫЙ текст блока.
+    """
+    b = block.strip()
+    if not b or len(b) < 15:
+        return None
+
+    # Имя клиента
+    m_name = re.search(r'(?:Full\s*Name|Name|Client|Owner|Holder|Customer|User)[:\s]+([^\r\n]+)', b, re.IGNORECASE)
+    name: str = ""
+    if m_name:
+        cand_name = m_name.group(1).strip()
+        cand_name = re.sub(r'["\';]', '', cand_name).strip()
+        cand_name = " ".join(cand_name.split()).upper()
+        if cand_name and len(cand_name) <= 80 and not any(ch in cand_name for ch in "{}[]()<>=/\\@:;"):
+            name = cand_name
+
+    if not name and fallback_name:
+        clean_fb = os.path.basename(fallback_name).replace("_", " ").strip()
+        if clean_fb and len(clean_fb) <= 80 and not clean_fb.lower().endswith((".txt", ".log", ".json")):
+            name = clean_fb.upper()
+
+    if not name:
+        return None
+
+    # Штат из адреса
+    state = extract_state_from_address_line(b) or "US"
+
+    # Дата (Open Date / Reg Date / Date / Created / DOB)
+    date_info: str = ""
+    reg_date: date | None = None
+
+    m_date = re.search(r'(?:Open\s*Date|Reg\s*Date|Created|Date)[:\s]+([^\r\n]+)', b, re.IGNORECASE)
+    if m_date:
+        d_cand = m_date.group(1).strip()
+        ext = extract_state_name_date(f"DUMMY {d_cand}")
+        if ext:
+            _, _, date_info, reg_date = ext
+
+    if not date_info:
+        m_dob = re.search(r'(?:DOB|Date\s*of\s*Birth|Birth\s*Date)[:\s]+([^\r\n]+)', b, re.IGNORECASE)
+        if m_dob:
+            d_cand = m_dob.group(1).strip()
+            ext = extract_state_name_date(f"DUMMY {d_cand}")
+            if ext:
+                _, _, date_info, reg_date = ext
+
+    if not date_info:
+        today = date.today()
+        date_info = today.strftime("%d.%m")
+        reg_date = today
+
+    normalized_data = f"{state} | {name} | {date_info}"
     return {
-        "state": "US",
-        "name": clean_name,
-        "date_info": "N/A",
-        "data": f"US | {clean_name} | N/A",
-        "raw_data": raw,
-        "registration_date": None,
+        "state": state,
+        "name": name[:100],
+        "date_info": date_info,
+        "data": normalized_data,
+        "raw_data": b,
+        "registration_date": reg_date,
     }
 
 def parse_accounts_from_text(text: str) -> list[ParsedAccount]:
@@ -343,71 +411,138 @@ def parse_accounts_from_text(text: str) -> list[ParsedAccount]:
     return results
 
 def parse_accounts_from_zip(zip_bytes: bytes) -> tuple[list[ParsedAccount], int]:
+    return parse_accounts_from_archive("upload.zip", zip_bytes)
+
+def parse_accounts_from_rar(rar_bytes: bytes) -> tuple[list[ParsedAccount], int]:
+    return parse_accounts_from_archive("upload.rar", rar_bytes)
+
+def extract_archive_recursively(root_dir: str, max_depth: int = 5) -> None:
+    """
+    Рекурсивно распаковывает любые вложенные .zip и .rar архивы внутри каталога root_dir.
+    Поддерживает произвольную глубину вложенности (архивы в архивах).
+    """
+    for _ in range(max_depth):
+        nested_archives: list[str] = []
+        for dirpath, _, filenames in os.walk(root_dir):
+            if "__MACOSX" in dirpath:
+                continue
+            for fn in filenames:
+                fn_lower = fn.lower()
+                if fn_lower.endswith(".zip") or fn_lower.endswith(".rar"):
+                    nested_archives.append(os.path.join(dirpath, fn))
+
+        if not nested_archives:
+            break
+
+        for arch_path in nested_archives:
+            arch_lower = arch_path.lower()
+            target_dir = os.path.splitext(arch_path)[0] + "_extracted"
+            os.makedirs(target_dir, exist_ok=True)
+
+            try:
+                if arch_lower.endswith(".zip"):
+                    with zipfile.ZipFile(arch_path) as zf:
+                        zf.extractall(target_dir)
+                elif arch_lower.endswith(".rar"):
+                    subprocess.run(
+                        ["unrar", "x", "-f", arch_path, target_dir],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=30,
+                        check=False,
+                    )
+            except Exception:
+                pass
+            finally:
+                try:
+                    os.remove(arch_path)
+                except Exception:
+                    pass
+
+def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount], int]:
     results: list[ParsedAccount] = []
     seen = set()
     files_processed = 0
 
-    dir_info_texts: dict[str, str] = {}
-    dir_info_states: dict[str, str] = {}
-    file_contents: list[tuple[str, str]] = []
+    txt_files: list[str] = []
+    for dirpath, _, filenames in os.walk(root_dir):
+        if "__MACOSX" in dirpath:
+            continue
+        for fn in filenames:
+            fn_lower = fn.lower()
+            if fn_lower.endswith((".txt", ".log", ".json", ".csv")):
+                txt_files.append(os.path.join(dirpath, fn))
 
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        for info in zf.infolist():
-            if info.is_dir() or info.filename.startswith("__MACOSX"):
-                continue
+    for fpath in txt_files:
+        fn_base = os.path.basename(fpath).lower()
+        folder_name = os.path.basename(os.path.dirname(fpath))
 
+        try:
+            with open(fpath, "rb") as f:
+                data = f.read()
+        except Exception:
+            continue
+
+        if not data or len(data) < 5:
+            continue
+
+        text = None
+        for enc in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
             try:
-                data = zf.read(info)
-            except Exception:
+                text = data.decode(enc)
+                break
+            except UnicodeDecodeError:
                 continue
 
-            if b"\x00" in data[:1024]:
-                continue
+        if not text:
+            continue
 
-            text = None
-            for encoding in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
-                try:
-                    text = data.decode(encoding)
-                    break
-                except UnicodeDecodeError:
-                    continue
+        files_processed += 1
 
-            if text is None:
-                continue
+        # 1. Проверяем наличие разделителей аккаунтов (==== или ---- или ____)
+        sep_pattern = re.compile(r'\n\s*={5,}\s*\n|\n\s*-{5,}\s*\n|\n\s*_{5,}\s*\n')
+        if sep_pattern.search(text):
+            blocks = [b.strip() for b in sep_pattern.split(text) if b.strip()]
+            for block in blocks:
+                acc = parse_account_from_log_block(block, fallback_name=folder_name)
+                if acc:
+                    key = acc["data"].upper()
+                    if key not in seen:
+                        seen.add(key)
+                        results.append(acc)
+            continue
 
-            files_processed += 1
-            fn_base = os.path.basename(info.filename).lower()
-            folder = os.path.dirname(info.filename)
+        # 2. Проверяем, является ли файл одиночным логом аккаунта (содержит Name:, Address:, DOB: и т.д.)
+        if re.search(r'(?:Full\s*Name|Name|Client|Owner|Holder)[:\s]+[A-Za-zА-Яа-я]', text, re.IGNORECASE):
+            acc = parse_account_from_log_block(text, fallback_name=folder_name or fn_base)
+            if acc:
+                key = acc["data"].upper()
+                if key not in seen:
+                    seen.add(key)
+                    results.append(acc)
+            continue
 
-            if fn_base == "info.txt":
-                dir_info_texts[folder] = text
-                st = extract_state_from_address_line(text)
-                if st:
-                    dir_info_states[folder] = st
-            else:
-                file_contents.append((info.filename, text))
+        # 3. Файл info.txt
+        if fn_base == "info.txt":
+            acc = parse_account_from_info_txt(text, context_name=folder_name)
+            if acc:
+                key = acc["data"].upper()
+                if key not in seen:
+                    seen.add(key)
+                    results.append(acc)
+            continue
 
-    # Parse accounts from info.txt if present
-    for folder, info_text in dir_info_texts.items():
-        ctx_name = folder if folder else "ACCOUNT"
-        acc = parse_account_from_info_txt(info_text, context_name=ctx_name)
-        if acc:
-            key = acc["data"].upper()
-            if key not in seen:
-                seen.add(key)
-                results.append(acc)
+        # 4. Пропускаем чисто JSON-файлы (куки) от построчного парсинга
+        if fn_base.endswith(".json") or text.strip().startswith(("{", "[")):
+            continue
 
-    # Parse remaining text files, inheriting state from info.txt if present
-    for filename, text in file_contents:
-        folder = os.path.dirname(filename)
-        inherited_state = dir_info_states.get(folder) or dir_info_states.get("")
-
+        # 5. Обычный построчный парсинг списка строк аккаунтов
         for line in text.splitlines():
-            parsed = parse_account_line(line)
+            line_str = line.strip()
+            if not line_str or len(line_str) < 5:
+                continue
+            parsed = parse_account_line(line_str)
             if parsed:
-                if parsed["state"] == "US" and inherited_state:
-                    parsed["state"] = inherited_state
-                    parsed["data"] = f"{parsed['state']} | {parsed['name']} | {parsed['date_info']}"
                 key = parsed["data"].upper()
                 if key not in seen:
                     seen.add(key)
@@ -415,106 +550,45 @@ def parse_accounts_from_zip(zip_bytes: bytes) -> tuple[list[ParsedAccount], int]
 
     return results, files_processed
 
-def parse_accounts_from_rar(rar_bytes: bytes) -> tuple[list[ParsedAccount], int]:
-    results: list[ParsedAccount] = []
-    seen = set()
-    files_processed = 0
-
-    dir_info_texts: dict[str, str] = {}
-    dir_info_states: dict[str, str] = {}
-    file_contents: list[tuple[str, str]] = []
+def parse_accounts_from_archive(filename: str, archive_bytes: bytes) -> tuple[list[ParsedAccount], int]:
+    fn_lower = filename.lower()
+    if not (fn_lower.endswith(".zip") or fn_lower.endswith(".rar")):
+        raise ValueError("Поддерживаются только архивы .zip и .rar")
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        rar_file = os.path.join(tmpdir, "archive.rar")
-        with open(rar_file, "wb") as f:
-            f.write(rar_bytes)
+        ext = os.path.splitext(filename)[1].lower()
+        init_arch = os.path.join(tmpdir, "upload" + ext)
+        with open(init_arch, "wb") as f:
+            f.write(archive_bytes)
 
-        out_dir = os.path.join(tmpdir, "out")
-        os.makedirs(out_dir, exist_ok=True)
+        if fn_lower.endswith(".zip"):
+            try:
+                with zipfile.ZipFile(init_arch) as zf:
+                    zf.extractall(tmpdir)
+            except Exception:
+                pass
+        elif fn_lower.endswith(".rar"):
+            try:
+                subprocess.run(
+                    ["unrar", "x", "-f", init_arch, tmpdir],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=30,
+                    check=False,
+                )
+            except Exception:
+                pass
 
         try:
-            subprocess.run(
-                ["unrar", "x", "-f", rar_file, out_dir],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=30,
-                check=False
-            )
+            os.remove(init_arch)
         except Exception:
             pass
 
-        for root, _, files in os.walk(out_dir):
-            for file in files:
-                if not file.lower().endswith(".txt"):
-                    continue
-                file_path = os.path.join(root, file)
-                try:
-                    with open(file_path, "rb") as f:
-                        data = f.read()
-                except Exception:
-                    continue
+        # Рекурсивная распаковка всех вложенных архивов (архивы в архивах)
+        extract_archive_recursively(tmpdir)
 
-                if b"\x00" in data[:1024]:
-                    continue
-
-                text = None
-                for encoding in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
-                    try:
-                        text = data.decode(encoding)
-                        break
-                    except UnicodeDecodeError:
-                        continue
-
-                if text is None:
-                    continue
-
-                files_processed += 1
-                rel_path = os.path.relpath(file_path, out_dir)
-                folder = os.path.dirname(rel_path)
-                fn_base = os.path.basename(file).lower()
-
-                if fn_base == "info.txt":
-                    dir_info_texts[folder] = text
-                    st = extract_state_from_address_line(text)
-                    if st:
-                        dir_info_states[folder] = st
-                else:
-                    file_contents.append((rel_path, text))
-
-        for folder, info_text in dir_info_texts.items():
-            ctx_name = folder if folder else "ACCOUNT"
-            acc = parse_account_from_info_txt(info_text, context_name=ctx_name)
-            if acc:
-                key = acc["data"].upper()
-                if key not in seen:
-                    seen.add(key)
-                    results.append(acc)
-
-        for filename, text in file_contents:
-            folder = os.path.dirname(filename)
-            inherited_state = dir_info_states.get(folder) or dir_info_states.get("")
-
-            for line in text.splitlines():
-                parsed = parse_account_line(line)
-                if parsed:
-                    if parsed["state"] == "US" and inherited_state:
-                        parsed["state"] = inherited_state
-                        parsed["data"] = f"{parsed['state']} | {parsed['name']} | {parsed['date_info']}"
-                    key = parsed["data"].upper()
-                    if key not in seen:
-                        seen.add(key)
-                        results.append(parsed)
-
-    return results, files_processed
-
-def parse_accounts_from_archive(filename: str, archive_bytes: bytes) -> tuple[list[ParsedAccount], int]:
-    fn = filename.lower()
-    if fn.endswith(".zip"):
-        return parse_accounts_from_zip(archive_bytes)
-    elif fn.endswith(".rar"):
-        return parse_accounts_from_rar(archive_bytes)
-    else:
-        raise ValueError("Поддерживаются только архивы .zip и .rar")
+        # Парсинг файлов из распакованного дерева
+        return parse_accounts_from_extracted_dir(tmpdir)
 
 def parse_archive_by_files(filename: str, archive_bytes: bytes) -> tuple[dict[str, list[ParsedAccount]], int]:
     """
@@ -770,6 +844,108 @@ async def add_accounts_auto_age_tiers(
                     state=acc.get("state", "US"),
                     name=acc["name"],
                     date_info=acc["date_info"],
+                    registration_date=acc.get("registration_date"),
+                    data=acc["data"],
+                    raw_data=acc.get("raw_data"),
+                    is_sold=False,
+                )
+            )
+
+    session.add_all(new_accounts)
+    await session.commit()
+    return stats
+
+async def get_or_create_age_tier_products_for_category(
+    session: AsyncSession,
+    category_id: int
+) -> list[Product]:
+    """
+    Получает все товары в категории (по всем подкатегориям).
+    Если товаров нет, создает дефолтную подкатегорию и линейку тиров (7+, 15+, 30+).
+    """
+    prods_res = await session.execute(
+        select(Product)
+        .join(Subcategory, Product.subcategory_id == Subcategory.id)
+        .where(Subcategory.category_id == category_id)
+        .order_by(Product.min_days.asc().nullslast(), Product.id.asc())
+    )
+    products = list(prods_res.scalars().all())
+
+    # Если уже есть товары с заданными min_days
+    has_tier = any(p.min_days is not None for p in products)
+    if has_tier:
+        return products
+
+    if products:
+        return products
+
+    # Товаров нет: ищем или создаем подкатегорию
+    cat = await session.get(Category, category_id)
+    cat_name = cat.name if cat else "Основная"
+
+    sub_res = await session.execute(
+        select(Subcategory).where(Subcategory.category_id == category_id).limit(1)
+    )
+    subcat = sub_res.scalar_one_or_none()
+    if not subcat:
+        subcat = Subcategory(category_id=category_id, name=f"{cat_name} | Основная")
+        session.add(subcat)
+        await session.commit()
+        await session.refresh(subcat)
+
+    created = []
+    for tier in DEFAULT_AGE_TIERS:
+        p = Product(
+            subcategory_id=subcat.id,
+            name=f"{cat_name} | {tier['name']}",
+            description=tier["description"],
+            price=tier["price"],
+            min_days=tier["min_days"],
+            max_days=tier["max_days"],
+        )
+        session.add(p)
+        created.append(p)
+    await session.commit()
+    for p in created:
+        await session.refresh(p)
+    return created
+
+async def add_accounts_to_category_auto_age(
+    session: AsyncSession,
+    category_id: int,
+    accounts_data: list[ParsedAccount]
+) -> dict[str, int]:
+    """
+    Распределяет аккаунты по товарам-тирам в рамках указанной Категории.
+    """
+    if not accounts_data:
+        return {}
+
+    products = await get_or_create_age_tier_products_for_category(session, category_id)
+    today = date.today()
+
+    prod_map: dict[int, list[ParsedAccount]] = {}
+    stats: dict[str, int] = {}
+
+    for acc in accounts_data:
+        reg_date = acc.get("registration_date")
+        age_days = (today - reg_date).days if reg_date else 0
+        matched_prod = match_product_by_age(products, age_days)
+        if not matched_prod:
+            matched_prod = products[0]
+
+        prod_map.setdefault(matched_prod.id, []).append(acc)
+        stats[matched_prod.name] = stats.get(matched_prod.name, 0) + 1
+
+    new_accounts: list[Account] = []
+    for pid, acc_list in prod_map.items():
+        for acc in acc_list:
+            new_accounts.append(
+                Account(
+                    product_id=pid,
+                    state=acc.get("state", "US"),
+                    name=acc["name"][:250],
+                    date_info=acc["date_info"][:30],
                     registration_date=acc.get("registration_date"),
                     data=acc["data"],
                     raw_data=acc.get("raw_data"),
