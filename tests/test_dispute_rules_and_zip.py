@@ -135,6 +135,30 @@ async def test_order_tabs_and_reviews():
         completed_orders = list(comp_res.scalars().all())
         assert len(completed_orders) == 1
 
+        # Test receipt delivery buttons under archive: '⭐️ Оставить отзыв' instead of 'my_orders'
+        from bot.keyboards.inline import get_order_delivery_kb
+        delivery_kb = get_order_delivery_kb(o1)
+        btn_texts = [btn.text for row in delivery_kb.inline_keyboard for btn in row]
+        assert "⭐️ Оставить отзыв" in btn_texts
+        assert "📦 Мои заказы" not in btn_texts
+
+        # Leave Review for o1 while on HOLD -> hold removed and order becomes COMPLETED!
+        rev_hold = OrderReview(
+            order_id=o1.id,
+            user_id=user.tg_id,
+            product_id=prod.id,
+            rating=5,
+            comment="Отличный аккаунт!",
+            is_after_dispute=False
+        )
+        session.add(rev_hold)
+        if o1.status == OrderStatus.HOLD:
+            o1.status = OrderStatus.COMPLETED
+            o1.resolved_at = datetime.utcnow()
+        await session.commit()
+        await session.refresh(o1)
+        assert o1.status == OrderStatus.COMPLETED
+
         # Leave Review for o3
         rev = OrderReview(
             order_id=o3.id,

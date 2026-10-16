@@ -178,7 +178,7 @@ def get_order_delivery_kb(order: Order) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
     builder.button(text="❓ Задать вопрос", callback_data=AskQuestionCD(order_id=order.id))
-    builder.button(text="📦 Мои заказы", callback_data="my_orders")
+    builder.button(text="⭐️ Оставить отзыв", callback_data=StartReviewCD(order_id=order.id))
     builder.adjust(2, 1)
     return builder.as_markup()
 
@@ -235,8 +235,8 @@ def get_order_detail_kb(order: Order, can_dispute: bool = True, has_review: bool
     elif order.status == OrderStatus.QUESTION:
         builder.button(text="💬 Чат вопроса по заказу", callback_data=AskQuestionCD(order_id=order.id))
 
-    # Для завершенных заказов — возможность оставить отзыв (1-5 звезд)
-    if order.status in (OrderStatus.COMPLETED, OrderStatus.REFUNDED) and not has_review:
+    # Возможность оставить отзыв (1-5 звезд)
+    if not has_review:
         builder.button(text="⭐️ Оставить отзыв", callback_data=StartReviewCD(order_id=order.id))
 
     builder.button(text="◀️ Назад к заказам", callback_data="my_orders")

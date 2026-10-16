@@ -610,6 +610,12 @@ async def process_rate_order(
         is_after_dispute=is_after_disp,
     )
     session.add(review)
+
+    # После отзыва — холд автоматически убирается (заказ переходит в COMPLETED)
+    if order.status == OrderStatus.HOLD:
+        order.status = OrderStatus.COMPLETED
+        order.resolved_at = datetime.utcnow()
+
     await session.commit()
     await session.refresh(review)
 
@@ -648,7 +654,7 @@ async def process_review_comment(
 
     await message.answer(
         f"🎉 <b>Спасибо за ваш отзыв{disp_tag}!</b>\n\n"
-        f"Ваша оценка успешно сохранена и поможет другим покупателям."
+        f"Ваша оценка успешно сохранена, гарантийный холд снят, заказ успешно завершен."
     )
 
 @disputes_router.callback_query(SkipReviewCD.filter())
@@ -658,9 +664,9 @@ async def skip_review_comment(
     state: FSMContext,
     session: AsyncSession
 ):
-    await callback.answer("Отзыв сохранен без комментария!")
+    await callback.answer("Отзыв сохранен!")
     await state.clear()
-    await callback.message.edit_text("🎉 <b>Спасибо за вашу оценку!</b> Отзыв сохранен.")
+    await callback.message.edit_text("🎉 <b>Спасибо за вашу оценку!</b> Отзыв сохранен, гарантийный холд снят, заказ успешно завершен.")
 
 # --- Структурированное форматирование чата и раздел «Чаты» ---
 
