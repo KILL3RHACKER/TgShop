@@ -53,11 +53,15 @@ async def test_order_code_encrypted_product_name():
         await session.commit()
         await session.refresh(order)
 
-        # Проверяем, что ID заказа — это зашифрованный код товара с hex-номером
-        # НЕ #ORD-1-TRU7D, а именно #TRU7D-0001
-        assert order.product_code == "TRU7D"
-        assert order.order_code == "#TRU7D-0001"
+        # Проверяем, что ID заказа — это TRU-{encrypted(Days-Time-UserID)}
+        assert order.bank_code == "TRU"
+        assert order.order_code.startswith("TRU-")
         assert "#ORD-1" not in order.order_code
+        decrypted = Order.decrypt_order_code(order.order_code)
+        assert decrypted is not None
+        assert decrypted["bank"] == "TRU"
+        assert decrypted["days"] == "7D"
+        assert decrypted["user_id"] == "12345678"
 
     await engine.dispose()
 
@@ -82,7 +86,7 @@ async def test_cookie_file_extraction_and_zip_generation():
     assert acc.get("cookie_data") is not None
     assert "xyz123" in acc["cookie_data"]
 
-    # Проверка генерации ZIP покупателю
+    # Проверка генерации ZIP покупателю: название архива = название товара, внутри только cookies.txt и info.txt
     order = Order(
         id=42,
         user_id=999,
@@ -103,18 +107,19 @@ async def test_cookie_file_extraction_and_zip_generation():
     )
 
     out_zip_bytes, out_fn = generate_account_zip(order, db_acc, product)
-    assert out_fn.endswith(".zip")
+    # Название архива = названию товара!
+    assert out_fn == "Truist 15d.zip"
 
-    # Проверяем содержимое выданного ZIP архива
+    # Проверяем содержимое выданного ZIP архива: строго cookies.txt и info.txt и все!
     with zipfile.ZipFile(io.BytesIO(out_zip_bytes), "r") as zf:
         namelist = zf.namelist()
-        assert "account.txt" in namelist
-        assert "full_data.txt" in namelist
-        assert "cookies.json" in namelist
-        assert "WARRANTY_MEMO.txt" in namelist
+        assert set(namelist) == {"cookies.txt", "info.txt"}
+        assert len(namelist) == 2
 
-        cookies_content = zf.read("cookies.json").decode("utf-8")
+        cookies_content = zf.read("cookies.txt").decode("utf-8")
         assert "xyz123" in cookies_content
+        info_content = zf.read("info.txt").decode("utf-8")
+        assert "JOHN DOE" in info_content
 
 @pytest.mark.asyncio
 async def test_chat_message_strict_formatting():

@@ -68,23 +68,19 @@ async def test_account_zip_generation():
 
         # Generate ZIP
         zip_bytes, zip_filename = generate_account_zip(order, acc, prod)
-        assert zip_filename.endswith(".zip")
+        assert zip_filename == "Truist 7+ Days.zip"
         assert len(zip_bytes) > 0
 
-        # Inspect ZIP contents
+        # Inspect ZIP contents: strictly cookies.txt and info.txt
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             namelist = zf.namelist()
-            assert "account.txt" in namelist
-            assert "full_data.txt" in namelist
-            assert "cookies.json" in namelist
-            assert "WARRANTY_MEMO.txt" in namelist
+            assert set(namelist) == {"cookies.txt", "info.txt"}
+            assert len(namelist) == 2
 
-            account_content = zf.read("account.txt").decode("utf-8")
-            assert "FL | JOHN DOE | 12.04" in account_content
-
-            memo_content = zf.read("WARRANTY_MEMO.txt").decode("utf-8")
-            assert "24 ЧАСА" in memo_content
-            assert "SLA" in memo_content
+            info_content = zf.read("info.txt").decode("utf-8")
+            assert "FL | JOHN DOE | 12.04" in info_content
+            cookies_content = zf.read("cookies.txt").decode("utf-8")
+            assert "xyz" in cookies_content
 
 @pytest.mark.asyncio
 async def test_order_tabs_and_reviews():

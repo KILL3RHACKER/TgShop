@@ -124,6 +124,8 @@ class Account(Base):
     def subcategory_id(self) -> int | None:
         return self.product.subcategory_id if self.product else None
 
+ORDER_CIPHER_KEY = b"KRAKEN_2026_ORDER_KEY_SLA"
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -158,38 +160,93 @@ class Order(Base):
         return self.product.subcategory if self.product else None
 
     @property
+    def bank_code(self) -> str:
+        """
+        Префикс банка (например: TRU для Truist, CHA для Chase, BOA для Bank of America).
+        """
+        cat_name = ""
+        if self.product and self.product.subcategory and self.product.subcategory.category:
+            cat_name = self.product.subcategory.category.name
+        elif self.product and self.product.subcategory:
+            cat_name = self.product.subcategory.name
+        elif self.product:
+            cat_name = self.product.name
+
+        cat_name = cat_name.strip()
+        words = [w for w in re.findall(r'[A-Za-z0-9]+', cat_name) if w.upper() not in ("BANK", "OF", "THE")]
+        if not words:
+            words = re.findall(r'[A-Za-z0-9]+', cat_name)
+
+        if len(words) >= 2 and len(words[0]) <= 4 and len(words[1]) <= 4:
+            return "".join(w[0] for w in words[:3]).upper()
+        elif words:
+            first = words[0].upper()
+            return first[:3] if len(first) >= 3 else first
+        return "TRU"
+
+    @property
     def product_code(self) -> str:
         """
-        Зашифрованный / закодированный код товара.
-        Например: Truist | 7 Дней -> TRU7D, Chase 15 Дней -> CHA15D
+        Код товара / тира для совместимости.
         """
-        p_name = self.product.name if self.product else ""
-        sub_name = self.product.subcategory.name if (self.product and self.product.subcategory) else ""
-        full_name = f"{sub_name} {p_name}".strip().upper()
-
-        m_days = re.search(r'(\d+)\s*(?:\+|ДН|DAY)', full_name)
-        days_tag = f"{m_days.group(1)}D" if m_days else ""
-
-        words = [w for w in re.findall(r'[A-Z0-9]+', full_name) if w not in ("ДНЕЙ", "ДНЯ", "ДЕНЬ", "DAYS", "DAY")]
-        prefix = ""
-        if words:
-            first = words[0]
-            if len(first) >= 3:
-                prefix = first[:3]
-            else:
-                prefix = "".join(w[:2] for w in words[:2])
-        if not prefix:
-            prefix = "PRD"
-        code = f"{prefix}{days_tag}" if days_tag else prefix
-        return code[:8]
+        return self.bank_code
 
     @property
     def order_code(self) -> str:
         """
-        ID заказа — это зашифрованное название товара с уникальным шестнадцатеричным номером.
-        Например: #TRU7D-0001, #CHA15D-0042
+        ID заказа вида TRU-Days-Time-UserID, где блок Days-Time-UserID зашифрован.
+        Например: TRU-0C36605B...
         """
-        return f"#{self.product_code}-{self.id:04X}"
+        bank = self.bank_code
+
+        # Days
+        if self.product and self.product.min_days is not None:
+            days_str = f"{self.product.min_days}D"
+        else:
+            full_title = f"{self.product.name if self.product else ''} {self.subcategory.name if self.subcategory else ''}"
+            m_days = re.search(r'(\d+)\s*(?:\+|D|Д|DAY)', full_title, re.IGNORECASE)
+            days_str = f"{m_days.group(1)}D" if m_days else "7D"
+
+        # Time
+        created = self.created_at or datetime.utcnow()
+        time_str = created.strftime("%H%M%S")
+
+        # UserID
+        user_id_str = str(self.user_id if self.user_id else 0)
+
+        # Исходный блок: Days-Time-UserID
+        plaintext = f"{days_str}-{time_str}-{user_id_str}"
+
+        # Шифрование в HEX
+        enc_bytes = bytes([b ^ ORDER_CIPHER_KEY[i % len(ORDER_CIPHER_KEY)] for i, b in enumerate(plaintext.encode("utf-8"))])
+        encrypted_payload = enc_bytes.hex().upper()
+
+        return f"{bank}-{encrypted_payload}"
+
+    @classmethod
+    def decrypt_order_code(cls, code: str) -> dict[str, str] | None:
+        """
+        Расшифровывает ID заказа: TRU-{encrypted_payload}
+        Возвращает: {'bank': 'TRU', 'days': '7D', 'time': '113000', 'user_id': '12345678'}
+        """
+        clean = code.lstrip("#")
+        if "-" not in clean:
+            return None
+        bank, enc = clean.split("-", 1)
+        try:
+            raw_bytes = bytes.fromhex(enc)
+            decrypted = bytes([b ^ ORDER_CIPHER_KEY[i % len(ORDER_CIPHER_KEY)] for i, b in enumerate(raw_bytes)]).decode("utf-8")
+            parts = decrypted.split("-")
+            if len(parts) >= 3:
+                return {
+                    "bank": bank,
+                    "days": parts[0],
+                    "time": parts[1],
+                    "user_id": parts[2]
+                }
+        except Exception:
+            pass
+        return None
 
     messages: Mapped[list["DisputeMessage"]] = relationship(
         back_populates="order",

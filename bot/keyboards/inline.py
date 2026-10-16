@@ -216,7 +216,7 @@ def get_my_orders_tabs_kb(
         btn_text = f"{o.order_code} | {prod_title} [${o.amount:.2f}] ({status_badge}){review_badge}"
         builder.button(text=btn_text, callback_data=OrderCD(id=o.id))
 
-    builder.button(text="◀️ Назад в профиль", callback_data="profile")
+    builder.button(text="◀️ Главное меню", callback_data="main_menu")
     
     adjust_pattern = [2]
     for _ in orders:
@@ -261,7 +261,7 @@ def get_my_orders_kb(orders: list[Order]) -> InlineKeyboardMarkup:
             text=f"#{o.id} | {sub_name} (${o.amount:.2f}) [{status_icon}]",
             callback_data=OrderCD(id=o.id)
         )
-    builder.button(text="◀️ Назад в профиль", callback_data="profile")
+    builder.button(text="◀️ Главное меню", callback_data="main_menu")
     builder.adjust(1)
     return builder.as_markup()
 
