@@ -107,8 +107,8 @@ async def test_cookie_file_extraction_and_zip_generation():
     )
 
     out_zip_bytes, out_fn = generate_account_zip(order, db_acc, product)
-    # Название архива = названию товара!
-    assert out_fn == "Truist 15d.zip"
+    # Название архива = названию товара/аккаунта (ST | NAME | DD.MM)
+    assert out_fn == "ID | JOHN DOE | 01.10.zip"
 
     # Проверяем содержимое выданного ZIP архива: строго cookies.txt и info.txt и все!
     with zipfile.ZipFile(io.BytesIO(out_zip_bytes), "r") as zf:

@@ -66,9 +66,9 @@ async def test_account_zip_generation():
         await session.commit()
         await session.refresh(order)
 
-        # Generate ZIP
+        # Generate ZIP (название архива = названию товара/аккаунта)
         zip_bytes, zip_filename = generate_account_zip(order, acc, prod)
-        assert zip_filename == "Truist 7+ Days.zip"
+        assert zip_filename == "FL | JOHN DOE | 12.04.zip"
         assert len(zip_bytes) > 0
 
         # Inspect ZIP contents: strictly cookies.txt and info.txt

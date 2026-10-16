@@ -7,16 +7,26 @@ def generate_account_zip(order: Order, account: Account, product: Product) -> tu
     """
     Генерирует ZIP-архив с данными купленного аккаунта.
     Требования:
-    - Название архива = названию товара ({product.name}.zip)
+    - Название архива = названию товара/аккаунта (а именно: TN | ROSE OGBURN | 07.10.zip)
     - В архиве строго два файла: cookies.txt и info.txt (и ничего больше)
     
     Возвращает: (zip_bytes, filename)
     """
     zip_buffer = io.BytesIO()
 
-    # Название архива при выдаче = названию товара
-    prod_name = product.name.strip() if (product and product.name) else "Account"
-    safe_name = prod_name.replace("/", " ").replace("\\", " ")
+    # Название архива при выдаче = названию конкретного товара/аккаунта (ST | NAME | DD.MM)
+    acc_title = ""
+    if account and account.data and account.data.strip():
+        acc_title = account.data.strip()
+    elif order and order.account_data and order.account_data.strip():
+        acc_title = order.account_data.strip()
+    elif product and product.name:
+        acc_title = product.name.strip()
+    else:
+        acc_title = "Account"
+
+    # Очищаем недопустимые символы слэшей пути, сохраняя вертикальную черту и данные
+    safe_name = acc_title.replace("/", " ").replace("\\", " ").strip()
     zip_filename = f"{safe_name}.zip"
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
