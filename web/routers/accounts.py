@@ -185,23 +185,39 @@ async def upload_archive_accounts(
     subcategory_id: int | None = Form(None),
     product_id: int | None = Form(None),
     upload_mode: str = Form("auto_age"),  # "auto_age" | "specific_product" | "by_filenames"
+    archive_files: list[UploadFile] = File(default=[]),
     session: AsyncSession = Depends(get_db),
 ):
-    form = await request.form()
-    
-    # Поддержка выбора нескольких архивов сразу (.zip / .rar)
-    raw_files = form.getlist("archive_files")
-    if not raw_files:
-        single = form.get("archive_file") or form.get("zip_file")
-        raw_files = [single] if single else []
+    uploaded_files = []
+    # 1. Check files from archive_files parameter
+    if isinstance(archive_files, list):
+        for f in archive_files:
+            if hasattr(f, "filename") and f.filename and f.filename.strip():
+                uploaded_files.append(f)
+    elif hasattr(archive_files, "filename") and archive_files.filename and archive_files.filename.strip():
+        uploaded_files.append(archive_files)
 
-    uploaded_files: list[UploadFile] = [
-        f for f in raw_files
-        if isinstance(f, UploadFile) and f.filename and f.filename.strip()
-    ]
+    # 2. Fallback check from request.form() for any file field variations
+    if not uploaded_files:
+        try:
+            form = await request.form()
+            seen_names = set()
+            for key in ("archive_files", "archive_files[]", "archive_file", "zip_file", "file", "files"):
+                for item in form.getlist(key):
+                    if hasattr(item, "filename") and item.filename and item.filename.strip():
+                        if item.filename not in seen_names:
+                            seen_names.add(item.filename)
+                            uploaded_files.append(item)
+                single_val = form.get(key)
+                if hasattr(single_val, "filename") and single_val.filename and single_val.filename.strip():
+                    if single_val.filename not in seen_names:
+                        seen_names.add(single_val.filename)
+                        uploaded_files.append(single_val)
+        except Exception:
+            pass
 
     if not uploaded_files:
-        msg = quote("Файлы архивов не загружены")
+        msg = quote("Файлы архивов не загружены. Пожалуйста, выберите .zip или .rar файл на диске перед отправкой.")
         return RedirectResponse(url=f"/accounts?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
     valid_files = [

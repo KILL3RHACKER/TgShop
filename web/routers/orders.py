@@ -102,6 +102,13 @@ async def send_dispute_message(
         msg = quote("Текст сообщения не может быть пустым")
         return RedirectResponse(url=f"/orders?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
 
+    now = datetime.utcnow()
+    order.last_reply_by = "admin"
+    order.last_reply_at = now
+    if order.status == OrderStatus.DISPUTED:
+        from datetime import timedelta
+        order.dispute_deadline = now + timedelta(hours=24)
+
     disp_msg = DisputeMessage(
         order_id=order.id,
         sender_id=admin.tg_id,

@@ -1,4 +1,5 @@
 import enum
+import re
 from datetime import datetime, date
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -16,6 +17,7 @@ class OrderStatus(str, enum.Enum):
     HOLD = "hold"              # Frozen for 24h verification window
     COMPLETED = "completed"    # Released to admin/store
     DISPUTED = "disputed"      # Dispute opened by customer
+    QUESTION = "question"      # Question opened by customer
     REFUNDED = "refunded"      # Refunded to customer
 
 class User(Base):
@@ -33,6 +35,10 @@ class User(Base):
 
     tron_address: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     tron_private_key: Mapped[str] = mapped_column(String(128))
+
+    # Правила магазина (Согласие перед использованием)
+    rules_accepted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", index=True)
+    rules_accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -132,9 +138,16 @@ class Order(Base):
     disputed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Kraken-style SLA: 24h response timers
+    last_reply_by: Mapped[str | None] = mapped_column(String(16), nullable=True)  # "client" | "admin"
+    last_reply_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dispute_deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    has_dispute: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
     user: Mapped["User"] = relationship(lazy="selectin")
     account: Mapped["Account | None"] = relationship(lazy="selectin")
     product: Mapped["Product | None"] = relationship(back_populates="orders", lazy="selectin")
+    review: Mapped["OrderReview | None"] = relationship(back_populates="order", uselist=False, lazy="selectin")
 
     @property
     def subcategory(self) -> Subcategory | None:
@@ -193,6 +206,23 @@ class DisputeMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     order: Mapped["Order"] = relationship(back_populates="messages")
+
+class OrderReview(Base):
+    __tablename__ = "order_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    rating: Mapped[int] = mapped_column(Integer)  # 1 to 5 stars
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_after_dispute: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    order: Mapped["Order"] = relationship(back_populates="review")
+    user: Mapped["User"] = relationship(lazy="selectin")
+    product: Mapped["Product | None"] = relationship(lazy="selectin")
 
 class TopUpTicket(Base):
     __tablename__ = "topup_tickets"

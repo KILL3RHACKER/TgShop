@@ -297,8 +297,10 @@
 
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Файлы архивов (.zip, .rar) *</label>
-                <input type="file" name="archive_files" multiple accept=".zip,.rar" required
+                <input type="file" id="archive_files" name="archive_files" multiple accept=".zip,.rar" required
+                    onchange="updateArchiveFilesList(this)"
                     class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
+                <div id="archive-files-preview" class="text-[11px] text-indigo-400 mt-1 font-medium hidden"></div>
                 <p class="text-[11px] text-slate-500 mt-1">Поддерживается выбор нескольких архивов сразу (.zip / .rar), а также архивы с вложенными архивами внутри.</p>
             </div>
 
@@ -404,5 +406,17 @@
     accountCheckboxes.forEach(cb => {
         cb.addEventListener('change', updateBulkBar);
     });
+
+    function updateArchiveFilesList(input) {
+        const preview = document.getElementById('archive-files-preview');
+        if (!preview) return;
+        if (input.files && input.files.length > 0) {
+            const names = Array.from(input.files).map(f => f.name).join(', ');
+            preview.textContent = '📁 Выбрано архивов (' + input.files.length + '): ' + names;
+            preview.classList.remove('hidden');
+        } else {
+            preview.classList.add('hidden');
+        }
+    }
 </script>
 {% endblock %}

@@ -12,16 +12,29 @@ from bot.keyboards.callbacks import (
     OpenDisputeCD,
     ReplyDisputeCD,
     ResolveDisputeCD,
+    AskQuestionCD,
+    MyOrdersTabCD,
+    StartReviewCD,
+    RateOrderCD,
+    SkipReviewCD,
 )
 from bot.database.models import Category, Subcategory, Product, Account, Order, OrderStatus
+
+def get_rules_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Ознакомлен и согласен с правилами", callback_data="accept_rules")
+    builder.adjust(1)
+    return builder.as_markup()
 
 def get_main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="🛍 Каталог", callback_data="catalog")
     builder.button(text="👤 Профиль", callback_data="profile")
+    builder.button(text="📦 Мои заказы", callback_data="my_orders")
+    builder.button(text="📜 Правила", callback_data="view_rules")
     if is_admin:
         builder.button(text="⚙️ Админ панель", callback_data="admin_menu")
-    builder.adjust(2, 1)
+    builder.adjust(2, 2, 1 if is_admin else 0)
     return builder.as_markup()
 
 def get_categories_kb(categories: list[Category]) -> InlineKeyboardMarkup:
@@ -73,7 +86,8 @@ def get_accounts_kb(
     product: Product,
     page: int = 1,
     total_pages: int = 1,
-    total_count: int = 0
+    total_count: int = 0,
+    back_category_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
@@ -106,7 +120,10 @@ def get_accounts_kb(
         else:
             builder.button(text=text, callback_data=cb)
 
-    builder.button(text="◀️ Назад к товарам", callback_data=SubcategoryCD(id=product.subcategory_id))
+    if back_category_id:
+        builder.button(text="◀️ Назад к подкатегориям", callback_data=CategoryCD(id=back_category_id))
+    else:
+        builder.button(text="◀️ Назад к товарам", callback_data=SubcategoryCD(id=product.subcategory_id))
 
     adjust_pattern = []
     if total_count > 0:
@@ -144,6 +161,85 @@ def get_ticket_admin_kb(ticket_id: int) -> InlineKeyboardMarkup:
     builder.adjust(2)
     return builder.as_markup()
 
+def get_order_delivery_kb(order: Order) -> InlineKeyboardMarkup:
+    """Кнопки в чеке после покупки под отправленным ZIP-архивом"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
+    builder.button(text="❓ Задать вопрос", callback_data=AskQuestionCD(order_id=order.id))
+    builder.button(text="📦 Мои заказы", callback_data="my_orders")
+    builder.adjust(2, 1)
+    return builder.as_markup()
+
+def get_my_orders_tabs_kb(
+    current_tab: str,
+    orders: list[Order],
+    attention_count: int,
+    completed_count: int
+) -> InlineKeyboardMarkup:
+    """Вкладки «Ожидают внимания» и «Завершенные»"""
+    builder = InlineKeyboardBuilder()
+    
+    # 1. Табы переключения
+    tab_att_text = f"⏳ Ожидают внимания ({attention_count})" + (" •" if current_tab == "attention" else "")
+    tab_comp_text = f"✅ Завершенные ({completed_count})" + (" •" if current_tab == "completed" else "")
+    
+    builder.button(text=tab_att_text, callback_data=MyOrdersTabCD(tab="attention"))
+    builder.button(text=tab_comp_text, callback_data=MyOrdersTabCD(tab="completed"))
+
+    # 2. Список заказов текущей вкладки
+    for o in orders:
+        if o.status == OrderStatus.HOLD:
+            status_badge = "⏳ Холд"
+        elif o.status == OrderStatus.DISPUTED:
+            status_badge = "🚨 Диспут"
+        elif o.status == OrderStatus.QUESTION:
+            status_badge = "❓ Вопрос"
+        elif o.status == OrderStatus.REFUNDED:
+            status_badge = "↩️ Возврат"
+        else:
+            status_badge = "✅ Закрыт"
+
+        review_badge = " ⭐️" if o.review else ""
+        prod_title = o.product.name if o.product else "Аккаунт"
+        btn_text = f"{o.order_code} | {prod_title} [${o.amount:.2f}] ({status_badge}){review_badge}"
+        builder.button(text=btn_text, callback_data=OrderCD(id=o.id))
+
+    builder.button(text="◀️ Назад в профиль", callback_data="profile")
+    
+    adjust_pattern = [2]
+    for _ in orders:
+        adjust_pattern.append(1)
+    adjust_pattern.append(1)
+    builder.adjust(*adjust_pattern)
+    return builder.as_markup()
+
+def get_order_detail_kb(order: Order, can_dispute: bool = True, has_review: bool = False) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if order.status == OrderStatus.HOLD and can_dispute:
+        builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
+        builder.button(text="❓ Задать вопрос", callback_data=AskQuestionCD(order_id=order.id))
+    elif order.status == OrderStatus.DISPUTED:
+        builder.button(text="💬 Чат диспута (SLA 24h)", callback_data=OpenDisputeCD(order_id=order.id))
+    elif order.status == OrderStatus.QUESTION:
+        builder.button(text="💬 Чат вопроса по заказу", callback_data=AskQuestionCD(order_id=order.id))
+
+    # Для завершенных заказов — возможность оставить отзыв (1-5 звезд)
+    if order.status in (OrderStatus.COMPLETED, OrderStatus.REFUNDED) and not has_review:
+        builder.button(text="⭐️ Оставить отзыв", callback_data=StartReviewCD(order_id=order.id))
+
+    builder.button(text="◀️ Назад к заказам", callback_data="my_orders")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def get_review_rating_kb(order_id: int) -> InlineKeyboardMarkup:
+    """Выбор рейтинга от 1 до 5 звезд"""
+    builder = InlineKeyboardBuilder()
+    for star in range(1, 6):
+        builder.button(text=f"⭐️ {star}", callback_data=RateOrderCD(order_id=order_id, rating=star))
+    builder.button(text="Пропустить отзыв", callback_data=SkipReviewCD(order_id=order_id))
+    builder.adjust(5, 1)
+    return builder.as_markup()
+
 def get_my_orders_kb(orders: list[Order]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for o in orders:
@@ -154,16 +250,6 @@ def get_my_orders_kb(orders: list[Order]) -> InlineKeyboardMarkup:
             callback_data=OrderCD(id=o.id)
         )
     builder.button(text="◀️ Назад в профиль", callback_data="profile")
-    builder.adjust(1)
-    return builder.as_markup()
-
-def get_order_detail_kb(order: Order, can_dispute: bool = True) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    if order.status == OrderStatus.HOLD and can_dispute:
-        builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
-    elif order.status == OrderStatus.DISPUTED:
-        builder.button(text="💬 Чат спора", callback_data=OpenDisputeCD(order_id=order.id))
-    builder.button(text="◀️ Назад к заказам", callback_data="my_orders")
     builder.adjust(1)
     return builder.as_markup()
 

@@ -18,6 +18,42 @@ async def init_db() -> None:
                 ALTER TABLE products ADD COLUMN IF NOT EXISTS max_days INTEGER;
                 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS state VARCHAR(16) DEFAULT 'US';
                 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS registration_date DATE;
+                
+                -- Subcategory relaxations
+                ALTER TABLE subcategories ALTER COLUMN description DROP NOT NULL;
+                ALTER TABLE subcategories ALTER COLUMN description SET DEFAULT '';
+                ALTER TABLE subcategories ALTER COLUMN price DROP NOT NULL;
+                ALTER TABLE subcategories ALTER COLUMN price SET DEFAULT 0.0;
+
+                -- User rules acceptance
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS rules_accepted BOOLEAN DEFAULT FALSE;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS rules_accepted_at TIMESTAMP;
+
+                -- Order SLA & dispute fields
+                ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_reply_by VARCHAR(16);
+                ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_reply_at TIMESTAMP;
+                ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispute_deadline TIMESTAMP;
+                ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_dispute BOOLEAN DEFAULT FALSE;
+            """))
+    except Exception:
+        pass
+
+    # Migration: add 'question' to orderstatus enum if using postgres enum
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'orderstatus') THEN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_enum 
+                            JOIN pg_type ON pg_type.oid = pg_enum.enumtypid 
+                            WHERE pg_type.typname = 'orderstatus' AND pg_enum.enumlabel = 'question'
+                        ) THEN
+                            ALTER TYPE orderstatus ADD VALUE 'question';
+                        END IF;
+                    END IF;
+                END $$;
             """))
     except Exception:
         pass

@@ -53,32 +53,32 @@ STATE_NAMES_MAP = {
 
 DEFAULT_AGE_TIERS = [
     {
-        "name": "Отлёжка 7+ Дней (7-14 дн.)",
+        "name": "7d",
         "min_days": 7,
         "max_days": 14,
-        "price": 5.0,
-        "description": "Отлёжка 7-14 полных дней. Прогретые аккаунты."
+        "price": 10.0,
+        "description": "Отлёжка 7-14 полных дней."
     },
     {
-        "name": "Отлёжка 15+ Дней (15-29 дн.)",
+        "name": "15d",
         "min_days": 15,
         "max_days": 29,
-        "price": 10.0,
-        "description": "Отлёжка 15-29 полных дней. Высокий траст."
+        "price": 15.0,
+        "description": "Отлёжка 15-29 полных дней."
     },
     {
-        "name": "Отлёжка 30+ Дней (30+ дн.)",
+        "name": "30d",
         "min_days": 30,
         "max_days": None,
-        "price": 15.0,
-        "description": "Отлёжка от 30 дней и старше. Максимальная отлёжка."
+        "price": 20.0,
+        "description": "Отлёжка от 30 дней и старше."
     },
     {
-        "name": "Свежие (до 7 дн.)",
+        "name": "<7d",
         "min_days": 0,
         "max_days": 6,
-        "price": 3.0,
-        "description": "Свежая регистрация до 7 дней отлёжки."
+        "price": 5.0,
+        "description": "Свежая регистрация до 7 дней."
     },
 ]
 
@@ -334,7 +334,11 @@ def parse_account_line(line: str) -> ParsedAccount | None:
 
     return None
 
-def parse_account_from_log_block(block: str, fallback_name: str = "") -> ParsedAccount | None:
+def parse_account_from_log_block(
+    block: str,
+    fallback_name: str = "",
+    allow_fallback_name: bool = True
+) -> ParsedAccount | None:
     """
     Парсит отдельный блок лога банковского аккаунта (содержит Name:, Address:, DOB:, cookies и т.д.).
     Возвращает ParsedAccount, где raw_data содержит ПОЛНЫЙ текст блока.
@@ -353,10 +357,15 @@ def parse_account_from_log_block(block: str, fallback_name: str = "") -> ParsedA
         if cand_name and len(cand_name) <= 80 and not any(ch in cand_name for ch in "{}[]()<>=/\\@:;"):
             name = cand_name
 
-    if not name and fallback_name:
-        clean_fb = os.path.basename(fallback_name).replace("_", " ").strip()
-        if clean_fb and len(clean_fb) <= 80 and not clean_fb.lower().endswith((".txt", ".log", ".json")):
-            name = clean_fb.upper()
+    if not name and allow_fallback_name and fallback_name:
+        # Разрешаем fallback_name только если в блоке есть признаки персональных данных (SSN, Address, DOB)
+        has_identity_signals = bool(re.search(r'(?:SSN|Address|DOB|Date|Zip|State)[:\s]', b, re.IGNORECASE))
+        if has_identity_signals:
+            clean_fb = os.path.basename(fallback_name).replace("_", " ").strip()
+            # Очищаем дату или номер лога с конца имени архива/папки (например, "CURTIS PURVIS 06.10 13" -> "CURTIS PURVIS")
+            clean_fb = re.sub(r'\s*\d{1,2}[./-]\d{1,2}.*$', '', clean_fb).strip()
+            if clean_fb and len(clean_fb) <= 80 and not clean_fb.lower().endswith((".txt", ".log", ".json")):
+                name = clean_fb.upper()
 
     if not name:
         return None
@@ -499,12 +508,16 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
 
         files_processed += 1
 
-        # 1. Проверяем наличие разделителей аккаунтов (==== или ---- или ____)
+        # 1. Проверяем, сколько клиентов в файле (дамп нескольких аккаунтов или один аккаунт)
+        name_matches = re.findall(r'(?:Full\s*Name|Name|Client|Owner|Holder|Customer)[:\s]+[A-Za-zА-Яа-я]', text, re.IGNORECASE)
+        has_multiple_customers = len(name_matches) > 1
+
         sep_pattern = re.compile(r'\n\s*={5,}\s*\n|\n\s*-{5,}\s*\n|\n\s*_{5,}\s*\n')
-        if sep_pattern.search(text):
+        if sep_pattern.search(text) and has_multiple_customers:
             blocks = [b.strip() for b in sep_pattern.split(text) if b.strip()]
             for block in blocks:
-                acc = parse_account_from_log_block(block, fallback_name=folder_name)
+                # В дампах с несколькими аккаунтами каждый блок обязан иметь реальное имя клиента
+                acc = parse_account_from_log_block(block, allow_fallback_name=False)
                 if acc:
                     key = acc["data"].upper()
                     if key not in seen:
@@ -512,9 +525,9 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
                         results.append(acc)
             continue
 
-        # 2. Проверяем, является ли файл одиночным логом аккаунта (содержит Name:, Address:, DOB: и т.д.)
+        # 2. Если в файле один клиент (или один лог с разделителями) — это ОДИН аккаунт целиком!
         if re.search(r'(?:Full\s*Name|Name|Client|Owner|Holder)[:\s]+[A-Za-zА-Яа-я]', text, re.IGNORECASE):
-            acc = parse_account_from_log_block(text, fallback_name=folder_name or fn_base)
+            acc = parse_account_from_log_block(text, fallback_name=folder_name or fn_base, allow_fallback_name=True)
             if acc:
                 key = acc["data"].upper()
                 if key not in seen:
@@ -861,8 +874,11 @@ async def get_or_create_age_tier_products_for_category(
 ) -> list[Product]:
     """
     Получает все товары в категории (по всем подкатегориям).
-    Если товаров нет, создает дефолтную подкатегорию и линейку тиров (7+, 15+, 30+).
+    Если товаров нет, создает линейку подкатегорий (Truist 7d, Truist 15d, Truist 30d) и товары внутри них.
     """
+    cat = await session.get(Category, category_id)
+    cat_name = cat.name.strip() if cat else "Банк"
+
     prods_res = await session.execute(
         select(Product)
         .join(Subcategory, Product.subcategory_id == Subcategory.id)
@@ -879,25 +895,29 @@ async def get_or_create_age_tier_products_for_category(
     if products:
         return products
 
-    # Товаров нет: ищем или создаем подкатегорию
-    cat = await session.get(Category, category_id)
-    cat_name = cat.name if cat else "Основная"
-
-    sub_res = await session.execute(
-        select(Subcategory).where(Subcategory.category_id == category_id).limit(1)
-    )
-    subcat = sub_res.scalar_one_or_none()
-    if not subcat:
-        subcat = Subcategory(category_id=category_id, name=f"{cat_name} | Основная")
-        session.add(subcat)
-        await session.commit()
-        await session.refresh(subcat)
-
+    # Создаем подкатегории и товары для каждого тира
     created = []
     for tier in DEFAULT_AGE_TIERS:
+        subcat_title = f"{cat_name} {tier['name']}"
+        sub_res = await session.execute(
+            select(Subcategory).where(
+                Subcategory.category_id == category_id,
+                Subcategory.name == subcat_title
+            ).limit(1)
+        )
+        subcat = sub_res.scalar_one_or_none()
+        if not subcat:
+            subcat = Subcategory(
+                category_id=category_id,
+                name=subcat_title,
+            )
+            session.add(subcat)
+            await session.commit()
+            await session.refresh(subcat)
+
         p = Product(
             subcategory_id=subcat.id,
-            name=f"{cat_name} | {tier['name']}",
+            name=subcat_title,
             description=tier["description"],
             price=tier["price"],
             min_days=tier["min_days"],
@@ -905,6 +925,7 @@ async def get_or_create_age_tier_products_for_category(
         )
         session.add(p)
         created.append(p)
+
     await session.commit()
     for p in created:
         await session.refresh(p)

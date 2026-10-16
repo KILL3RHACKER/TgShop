@@ -35,3 +35,20 @@ class ReplyDisputeCD(CallbackData, prefix="dsp_reply"):
 class ResolveDisputeCD(CallbackData, prefix="dsp_res"):
     order_id: int
     action: str  # "refund" | "reject"
+
+class AskQuestionCD(CallbackData, prefix="ord_q"):
+    order_id: int
+
+class MyOrdersTabCD(CallbackData, prefix="ord_tab"):
+    tab: str  # "attention" | "completed"
+    page: int = 1
+
+class StartReviewCD(CallbackData, prefix="ord_rev_start"):
+    order_id: int
+
+class RateOrderCD(CallbackData, prefix="ord_rate"):
+    order_id: int
+    rating: int  # 1..5
+
+class SkipReviewCD(CallbackData, prefix="ord_rev_skip"):
+    order_id: int

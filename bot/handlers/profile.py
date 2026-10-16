@@ -18,6 +18,12 @@ async def show_profile(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("Пользователь не найден. Перезапустите бота с помощью /start.", show_alert=True)
         return
 
+    if not user.rules_accepted:
+        from bot.handlers.common import SHOP_RULES_TEXT
+        from bot.keyboards.inline import get_rules_kb
+        await callback.message.edit_text(SHOP_RULES_TEXT, reply_markup=get_rules_kb())
+        return
+
     # Подсчет приглашенных пользователей
     ref_count = await session.scalar(
         select(func.count(User.id)).where(User.referrer_id == tg_id)

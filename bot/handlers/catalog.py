@@ -1,7 +1,7 @@
 import math
 from datetime import datetime, timedelta
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, BufferedInputFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -23,7 +23,11 @@ from bot.keyboards.inline import (
     get_accounts_kb,
     get_account_card_kb,
     get_order_detail_kb,
+    get_order_delivery_kb,
+    get_rules_kb,
 )
+from bot.handlers.common import SHOP_RULES_TEXT
+from bot.services.account_zip import generate_account_zip
 
 catalog_router = Router()
 PAGE_SIZE = 6
@@ -39,6 +43,11 @@ async def out_of_stock_action(callback: CallbackQuery):
 @catalog_router.callback_query(F.data == "catalog")
 async def show_categories(callback: CallbackQuery, session: AsyncSession):
     await callback.answer()
+    user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+    if user and not user.rules_accepted:
+        await callback.message.edit_text(SHOP_RULES_TEXT, reply_markup=get_rules_kb())
+        return
+
     result = await session.execute(select(Category).order_by(Category.name))
     categories = list(result.scalars().all())
 
@@ -79,8 +88,9 @@ async def show_subcategories(
 
     subcat_ids = [s.id for s in subcategories]
     counts_res = await session.execute(
-        select(Product.subcategory_id, func.count(Product.id))
-        .where(Product.subcategory_id.in_(subcat_ids))
+        select(Product.subcategory_id, func.count(Account.id))
+        .join(Account, Account.product_id == Product.id)
+        .where(Product.subcategory_id.in_(subcat_ids), Account.is_sold == False)
         .group_by(Product.subcategory_id)
     )
     counts = dict(counts_res.all())
@@ -116,6 +126,16 @@ async def show_products(
         await callback.answer("В этой подкатегории пока нет товаров.", show_alert=True)
         return
 
+    # Если в подкатегории ровно 1 товар (тир), сразу переходим к витрине товаров (аккаунтов)!
+    if len(products) == 1:
+        return await render_accounts_showcase(
+            callback=callback,
+            product=products[0],
+            page=1,
+            session=session,
+            back_category_id=subcategory.category_id
+        )
+
     prod_ids = [p.id for p in products]
     counts_res = await session.execute(
         select(Account.product_id, func.count(Account.id))
@@ -141,6 +161,24 @@ async def show_accounts_in_product(
         await callback.answer("Товар не найден.", show_alert=True)
         return
 
+    subcat = product.subcategory
+    back_cat_id = subcat.category_id if subcat else None
+
+    await render_accounts_showcase(
+        callback=callback,
+        product=product,
+        page=callback_data.page,
+        session=session,
+        back_category_id=back_cat_id
+    )
+
+async def render_accounts_showcase(
+    callback: CallbackQuery,
+    product: Product,
+    page: int,
+    session: AsyncSession,
+    back_category_id: int | None = None
+):
     # Total unsold accounts
     total_count = await session.scalar(
         select(func.count(Account.id)).where(
@@ -150,7 +188,7 @@ async def show_accounts_in_product(
     ) or 0
 
     total_pages = max(1, math.ceil(total_count / PAGE_SIZE))
-    page = max(1, min(callback_data.page, total_pages))
+    page = max(1, min(page, total_pages))
     offset = (page - 1) * PAGE_SIZE
 
     # Sorting: свежие на первой странице (ORDER BY created_at DESC, id DESC)
@@ -184,7 +222,8 @@ async def show_accounts_in_product(
             product=product,
             page=page,
             total_pages=total_pages,
-            total_count=total_count
+            total_count=total_count,
+            back_category_id=back_category_id
         )
     )
 
@@ -273,6 +312,7 @@ async def buy_specific_account(
     )
     session.add(order)
     await session.commit()
+    await session.refresh(order)
 
     hold_str = hold_until.strftime("%d.%m.%Y %H:%M UTC")
     success_text = (
@@ -283,12 +323,16 @@ async def buy_specific_account(
         f"📦 <b>Данные аккаунта:</b>\n"
         f"<code>{account.data}</code>\n\n"
         f"⏳ <b>Гарантия на проверку: 24 часа</b> (до {hold_str}).\n"
-        f"В случае проблем вы можете открыть диспут по кнопке ниже."
+        f"Аккаунт сформирован в ZIP-архиве выше."
     )
 
-    await callback.message.answer(
-        success_text,
-        reply_markup=get_order_detail_kb(order, can_dispute=True)
+    zip_bytes, zip_filename = generate_account_zip(order, account, product)
+    zip_doc = BufferedInputFile(zip_bytes, filename=zip_filename)
+
+    await callback.message.answer_document(
+        document=zip_doc,
+        caption=success_text,
+        reply_markup=get_order_delivery_kb(order)
     )
 
     # Notify admin
@@ -314,6 +358,10 @@ async def buy_fast_freshest_account(
     user = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
     if not user:
         await callback.answer("Ошибка: пользователь не найден.", show_alert=True)
+        return
+
+    if not user.rules_accepted:
+        await callback.message.answer(SHOP_RULES_TEXT, reply_markup=get_rules_kb())
         return
 
     product = await session.get(Product, callback_data.product_id)
@@ -360,6 +408,7 @@ async def buy_fast_freshest_account(
     )
     session.add(order)
     await session.commit()
+    await session.refresh(order)
 
     hold_str = hold_until.strftime("%d.%m.%Y %H:%M UTC")
     success_text = (
@@ -369,12 +418,17 @@ async def buy_fast_freshest_account(
         f"💰 <b>Остаток баланса:</b> ${float(user.balance):.2f}\n\n"
         f"📦 <b>Ваш свежий аккаунт:</b>\n"
         f"<code>{account.data}</code>\n\n"
-        f"⏳ <b>Гарантия на проверку: 24 часа</b> (до {hold_str})."
+        f"⏳ <b>Гарантия на проверку: 24 часа</b> (до {hold_str}).\n"
+        f"Архив с полными данными прикреплен выше."
     )
 
-    await callback.message.answer(
-        success_text,
-        reply_markup=get_order_detail_kb(order, can_dispute=True)
+    zip_bytes, zip_filename = generate_account_zip(order, account, product)
+    zip_doc = BufferedInputFile(zip_bytes, filename=zip_filename)
+
+    await callback.message.answer_document(
+        document=zip_doc,
+        caption=success_text,
+        reply_markup=get_order_delivery_kb(order)
     )
 
     try:

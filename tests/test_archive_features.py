@@ -21,7 +21,7 @@ Address: 456 MAIN ST LOS ANGELES CA 90001
 SSN: 123456789
 """
 
-def run_tests():
+def test_archive_features():
     # Test 1: Single archive with bank logs and cookie json
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
