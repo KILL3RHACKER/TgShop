@@ -389,3 +389,75 @@ async def test_chat_sync_read_unread_and_delete():
 
     await engine.dispose()
 
+@pytest.mark.asyncio
+async def test_ssn_deduplication_and_reputation_escalation():
+    """Проверка дедупликации аккаунтов по SSN и расчета досье репутации при эскалации"""
+    from web.services import extract_ssn, add_accounts_to_category_auto_age
+    from bot.services.reputation import get_user_reputation, format_reputation_text
+    from bot.keyboards.inline import get_dispute_moderator_kb, get_dispute_admin_kb
+
+    # 1. Проверка парсера SSN
+    assert extract_ssn("Name: John\nSSN: 123-45-6789\nDOB: 12.04") == "123-45-6789"
+    assert extract_ssn("Address: Main St\nSSN: 987654321") == "987-65-4321"
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with async_session() as session:
+        cat = Category(name="Chase")
+        session.add(cat)
+        await session.commit()
+        await session.refresh(cat)
+
+        # 2. Добавляем 2 аккаунта с ОДИНАКОВЫМ SSN -> должен добавиться только 1!
+        today = date.today()
+        accs = [
+            {
+                "state": "CA",
+                "name": "FIRST ACC",
+                "date_info": "01.10",
+                "registration_date": today - timedelta(days=10),
+                "data": "CA | FIRST ACC | 01.10",
+                "raw_data": "SSN: 111-22-3333",
+                "ssn": "111-22-3333",
+            },
+            {
+                "state": "NY",
+                "name": "SECOND ACC DUPLICATE",
+                "date_info": "02.10",
+                "registration_date": today - timedelta(days=10),
+                "data": "NY | SECOND ACC DUPLICATE | 02.10",
+                "raw_data": "SSN: 111-22-3333",
+                "ssn": "111-22-3333",
+            },
+        ]
+        stats = await add_accounts_to_category_auto_age(session, cat.id, accs)
+        total_added = sum(stats.values())
+        assert total_added == 1
+
+        # Повторная загрузка того же SSN -> 0 добавлено
+        stats_repeat = await add_accounts_to_category_auto_age(session, cat.id, [accs[0]])
+        assert sum(stats_repeat.values()) == 0
+
+        # 3. Проверка досье репутации
+        rep = await get_user_reputation(session, user_id=99999)
+        assert rep["total_orders"] == 0
+        assert rep["trust_label"] == "⚪️ Новый покупатель"
+
+        # 4. Проверка кнопок модератора и админа
+        mod_kb = get_dispute_moderator_kb(1)
+        mod_texts = [b.text for row in mod_kb.inline_keyboard for b in row]
+        assert "⚡️ Позвать Администратора" in mod_texts
+        assert "✅ Одобрить возврат покупателю" not in mod_texts  # Модератор не выносит окончательный вердикт без админа!
+
+        adm_kb = get_dispute_admin_kb(1)
+        adm_texts = [b.text for row in adm_kb.inline_keyboard for b in row]
+        assert "✅ Одобрить возврат покупателю" in adm_texts
+        assert "❌ Закрыть в пользу магазина" in adm_texts
+
+    await engine.dispose()
+
+

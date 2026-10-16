@@ -24,6 +24,7 @@ from bot.keyboards.callbacks import (
     ChatViewCD,
     ChatReplyCD,
     DeleteChatCD,
+    EscalateDisputeCD,
     AdminReplaceSelectCD,
     AdminConfirmReplaceCD,
 )
@@ -31,6 +32,7 @@ from bot.keyboards.inline import (
     get_my_orders_tabs_kb,
     get_order_detail_kb,
     get_dispute_admin_kb,
+    get_dispute_moderator_kb,
     get_review_rating_kb,
     get_chats_list_kb,
     get_chat_view_kb,
@@ -38,6 +40,7 @@ from bot.keyboards.inline import (
     get_order_delivery_kb,
 )
 from bot.services.account_zip import generate_account_zip
+from bot.services.reputation import get_user_reputation, format_reputation_text
 
 logger = logging.getLogger(__name__)
 
@@ -288,14 +291,21 @@ async def process_client_dispute_message(
         f"💬 <b>Сообщение:</b>\n{text or '<i>[Только скриншот]</i>'}"
     )
 
-    kb = get_dispute_admin_kb(order.id)
-    try:
-        if photo_id:
-            await bot.send_photo(chat_id=config.admin_id, photo=photo_id, caption=admin_text, reply_markup=kb)
-        else:
-            await bot.send_message(chat_id=config.admin_id, text=admin_text, reply_markup=kb)
-    except Exception:
-        pass
+    # Диспуты сначала идут к модераторам
+    mod_stmt = select(User.tg_id).where(User.role == "moderator")
+    mod_res = await session.execute(mod_stmt)
+    mods = list(mod_res.scalars().all())
+    targets = mods if mods else [config.admin_id]
+
+    kb = get_dispute_moderator_kb(order.id)
+    for target_id in targets:
+        try:
+            if photo_id:
+                await bot.send_photo(chat_id=target_id, photo=photo_id, caption=admin_text, reply_markup=kb)
+            else:
+                await bot.send_message(chat_id=target_id, text=admin_text, reply_markup=kb)
+        except Exception:
+            pass
 
     # Отправляем обновленный чат клиенту
     history_text = format_chat_messages(order, order.messages)
@@ -392,17 +402,20 @@ async def process_client_question_message(
         f"💬 <b>Вопрос покупателя:</b>\n{text}"
     )
 
-    builder = InlineKeyboardBuilder()
-    builder.button(text="💬 Ответить на вопрос", callback_data=ReplyDisputeCD(order_id=order.id))
-    builder.adjust(1)
+    mod_stmt = select(User.tg_id).where(User.role == "moderator")
+    mod_res = await session.execute(mod_stmt)
+    mods = list(mod_res.scalars().all())
+    targets = mods if mods else [config.admin_id]
 
-    try:
-        if photo_id:
-            await bot.send_photo(chat_id=config.admin_id, photo=photo_id, caption=admin_text, reply_markup=builder.as_markup())
-        else:
-            await bot.send_message(chat_id=config.admin_id, text=admin_text, reply_markup=builder.as_markup())
-    except Exception:
-        pass
+    kb = get_dispute_moderator_kb(order.id)
+    for target_id in targets:
+        try:
+            if photo_id:
+                await bot.send_photo(chat_id=target_id, photo=photo_id, caption=admin_text, reply_markup=kb)
+            else:
+                await bot.send_message(chat_id=target_id, text=admin_text, reply_markup=kb)
+        except Exception:
+            pass
 
     # Отправляем обновленный чат клиенту
     history_text = format_chat_messages(order, order.messages)
@@ -504,7 +517,69 @@ async def process_admin_reply(
     except Exception:
         pass
 
-# --- 4. Решение диспута (возврат / закрытие в пользу магазина) ---
+# --- 4. Эскалация и Решение диспута (Модератор -> Администратор) ---
+
+@disputes_router.callback_query(EscalateDisputeCD.filter())
+async def escalate_dispute_handler(
+    callback: CallbackQuery,
+    callback_data: EscalateDisputeCD,
+    session: AsyncSession,
+    bot: Bot
+):
+    await callback.answer()
+    order = await session.get(Order, callback_data.order_id)
+    if not order:
+        await callback.message.answer("Заказ не найден.")
+        return
+
+    caller = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+    is_staff = (callback.from_user.id == config.admin_id) or (caller and caller.role in ("moderator", "admin"))
+    if not is_staff:
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+
+    now = datetime.utcnow()
+    order.escalated_to_admin = True
+    order.escalated_at = now
+
+    # Запись в чат о передаче дела администратору
+    esc_msg = DisputeMessage(
+        order_id=order.id,
+        sender_id=callback.from_user.id,
+        sender_role="admin",
+        text="[ЭСКАЛАЦИЯ] Модератор передал спор Главному Администратору для рассмотрения доказательств, репутации клиента и вынесения окончательного вердикта."
+    )
+    session.add(esc_msg)
+    await session.commit()
+    await session.refresh(order)
+
+    # Загружаем досье репутации клиента
+    rep = await get_user_reputation(session, order.user_id)
+    buyer = await session.scalar(select(User).where(User.tg_id == order.user_id))
+    rep_text = format_reputation_text(rep, username=buyer.username if buyer else None, user_id=order.user_id)
+
+    history_text = format_chat_messages(order, order.messages)
+    admin_alert = (
+        f"⚖️ <b>ЭСКАЛАЦИЯ СПОРА АДМИНИСТРАТОРУ {order.order_code}</b>\n\n"
+        f"Модератор запросил рассмотрение Главным Администратором.\n"
+        f"💵 Сумма: <b>${order.amount:.2f} USDT</b>\n"
+        f"📦 Товар: <code>{order.account_data or (order.account.data if order.account else '—')}</code>\n\n"
+        f"{rep_text}\n\n"
+        f"<b>История сообщений и доказательства:</b>\n"
+        f"{history_text}\n\n"
+        f"<i>Изучите доказательства и репутацию и вынесите окончательный вердикт:</i>"
+    )
+
+    admin_kb = get_dispute_admin_kb(order.id)
+    try:
+        await bot.send_message(chat_id=config.admin_id, text=admin_alert, reply_markup=admin_kb)
+    except Exception as e:
+        logger.error(f"Failed to alert admin about escalation: {e}")
+
+    await callback.message.edit_text(
+        f"⚡️ <b>Спор по заказу {order.order_code} эскалирован Администратору!</b>\n\n"
+        f"Досье репутации клиента и доказательства отправлены Главному Администратору для вынесения окончательного вердикта."
+    )
 
 @disputes_router.callback_query(ResolveDisputeCD.filter())
 async def resolve_dispute(
@@ -513,8 +588,10 @@ async def resolve_dispute(
     session: AsyncSession,
     bot: Bot
 ):
-    if callback.from_user.id != config.admin_id:
-        await callback.answer("Доступ запрещен.", show_alert=True)
+    caller = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+    is_admin = (callback.from_user.id == config.admin_id) or (caller and caller.role == "admin")
+    if not is_admin:
+        await callback.answer("Только Главный Администратор может выносить окончательный вердикт по спору.", show_alert=True)
         return
 
     await callback.answer()
@@ -534,7 +611,7 @@ async def resolve_dispute(
 
         await callback.message.edit_text(
             f"✅ <b>Диспут {order.order_code} решен в пользу покупателя.</b>\n"
-            f"Сумма ${order.amount:.2f} возвращена на баланс покупателя @{user.username if user else ''}."
+            f"Окончательный вердикт Администратора: средства ${order.amount:.2f} возвращены на баланс покупателя @{user.username if user else ''}."
         )
 
         try:
@@ -546,6 +623,7 @@ async def resolve_dispute(
                 chat_id=order.user_id,
                 text=(
                     f"🎉 <b>Диспут по заказу {order.order_code} решен в вашу пользу!</b>\n\n"
+                    f"Главный Администратор всесторонне изучил доказательства и вашу репутацию:\n"
                     f"Средства в размере <b>${order.amount:.2f} USDT</b> возвращены на ваш баланс магазина.\n\n"
                     f"Вы также можете оценить заказ и работу поддержки:"
                 ),
@@ -561,7 +639,7 @@ async def resolve_dispute(
 
         await callback.message.edit_text(
             f"❌ <b>Диспут {order.order_code} закрыт в пользу магазина.</b>\n"
-            f"Средства разморожены."
+            f"Окончательный вердикт Администратора вынесен на основе доказательств и репутации."
         )
 
         try:
@@ -572,8 +650,8 @@ async def resolve_dispute(
             await bot.send_message(
                 chat_id=order.user_id,
                 text=(
-                    f"❌ <b>Диспут по заказу {order.order_code} закрыт администратором.</b>\n\n"
-                    f"Решение принято в пользу магазина. Средства не подлежат возврату."
+                    f"❌ <b>Диспут по заказу {order.order_code} закрыт Главным Администратором.</b>\n\n"
+                    f"Администратор всесторонне изучил доказательства и историю заказов и вынес окончательное решение в пользу магазина. Средства не подлежат возврату."
                 ),
                 reply_markup=builder.as_markup()
             )

@@ -62,6 +62,9 @@ class ChatReplyCD(CallbackData, prefix="cht_r"):
 class DeleteChatCD(CallbackData, prefix="cht_del"):
     order_id: int
 
+class EscalateDisputeCD(CallbackData, prefix="dsp_esc"):
+    order_id: int
+
 class AdminReplaceSelectCD(CallbackData, prefix="adm_repl_sel"):
     order_id: int
     page: int = 1

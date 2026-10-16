@@ -1,5 +1,6 @@
 from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, Message
+from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -229,3 +230,49 @@ async def list_hold_orders(callback: CallbackQuery, session: AsyncSession):
     builder.button(text="◀️ Назад", callback_data="admin_menu")
     builder.adjust(1)
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
+
+@admin_router.message(Command("set_mod"))
+async def set_moderator_cmd(message: Message, session: AsyncSession):
+    if not is_admin_check(message.from_user.id):
+        return
+    parts = message.text.strip().split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Формат: <code>/set_mod {tg_id}</code>")
+        return
+    target_tg_id = int(parts[1])
+    user = await session.scalar(select(User).where(User.tg_id == target_tg_id))
+    if not user:
+        await message.answer(f"Пользователь с TG ID {target_tg_id} не найден в базе бота.")
+        return
+    user.role = "moderator"
+    await session.commit()
+    await message.answer(f"✅ Пользователю @{user.username or '—'} (<code>{target_tg_id}</code>) присвоена роль <b>Модератор</b>.")
+
+@admin_router.message(Command("del_mod"))
+async def del_moderator_cmd(message: Message, session: AsyncSession):
+    if not is_admin_check(message.from_user.id):
+        return
+    parts = message.text.strip().split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Формат: <code>/del_mod {tg_id}</code>")
+        return
+    target_tg_id = int(parts[1])
+    user = await session.scalar(select(User).where(User.tg_id == target_tg_id))
+    if not user:
+        await message.answer(f"Пользователь с TG ID {target_tg_id} не найден.")
+        return
+    user.role = "buyer"
+    await session.commit()
+    await message.answer(f"✅ Роль пользователя @{user.username or '—'} (<code>{target_tg_id}</code>) сброшена до <b>Покупатель</b>.")
+
+@admin_router.message(Command("mods"))
+async def list_moderators_cmd(message: Message, session: AsyncSession):
+    if not is_admin_check(message.from_user.id):
+        return
+    res = await session.execute(select(User).where(User.role == "moderator"))
+    mods = list(res.scalars().all())
+    if not mods:
+        await message.answer("В системе пока нет назначенных модераторов.\nНазначить: <code>/set_mod {tg_id}</code>")
+        return
+    lines = [f"• @{m.username or '—'} (<code>{m.tg_id}</code>)" for m in mods]
+    await message.answer("🛡 <b>Список модераторов магазина:</b>\n\n" + "\n".join(lines))

@@ -30,6 +30,10 @@ async def init_db() -> None:
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_unread BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_unread BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cookie_data TEXT;",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS ssn VARCHAR(32);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(16) DEFAULT 'buyer';",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS escalated_to_admin BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP;",
     ]
     for stmt in ddl_statements:
         try:

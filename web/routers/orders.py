@@ -69,6 +69,13 @@ async def list_orders(
     )
     available_accounts = list(unsold_res.scalars().all())
 
+    # Репутация покупателей для вынесения вердикта по спорам
+    from bot.services.reputation import get_user_reputation
+    user_ids = {o.user_id for o in orders if o.user_id}
+    reputations = {}
+    for uid in user_ids:
+        reputations[uid] = await get_user_reputation(session, uid)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request=request,
@@ -78,6 +85,7 @@ async def list_orders(
             "active_tab": "orders",
             "orders": orders,
             "available_accounts": available_accounts,
+            "reputations": reputations,
             "now": datetime.utcnow(),
             "status_filter": status_filter,
             "q": search,

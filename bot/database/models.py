@@ -36,11 +36,15 @@ class User(Base):
     tron_address: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     tron_private_key: Mapped[str] = mapped_column(String(128))
 
+    # Роли пользователей: "buyer", "moderator", "admin"
+    role: Mapped[str] = mapped_column(String(16), default="buyer", server_default="buyer", index=True)
+
     # Правила магазина (Согласие перед использованием)
     rules_accepted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", index=True)
     rules_accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    orders: Mapped[list["Order"]] = relationship(back_populates="user", lazy="selectin")
 
 class Category(Base):
     __tablename__ = "categories"
@@ -100,6 +104,7 @@ class Account(Base):
     name: Mapped[str] = mapped_column(String(255), index=True)  # Format: "NAME SURNAME"
     date_info: Mapped[str] = mapped_column(String(32), index=True)  # Format: "DD.MM"
     registration_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    ssn: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)  # SSN (Social Security Number)
     raw_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     cookie_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -150,7 +155,11 @@ class Order(Base):
     user_unread: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     admin_unread: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
-    user: Mapped["User"] = relationship(lazy="selectin")
+    # Эскалация Администратору от Модератора
+    escalated_to_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", index=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="orders", lazy="selectin")
     account: Mapped["Account | None"] = relationship(lazy="selectin")
     product: Mapped["Product | None"] = relationship(back_populates="orders", lazy="selectin")
     review: Mapped["OrderReview | None"] = relationship(back_populates="order", uselist=False, lazy="selectin")

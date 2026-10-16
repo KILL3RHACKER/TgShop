@@ -20,6 +20,29 @@ class ParsedAccount(TypedDict, total=False):
     raw_data: str
     registration_date: date | None
     cookie_data: str | None
+    ssn: str | None
+
+def extract_ssn(text: str) -> str | None:
+    """
+    Извлекает номер SSN (Social Security Number) в формате 9 цифр или XXX-XX-XXXX.
+    Используется как главный уникальный ключ аккаунта для предотвращения дублирования.
+    Возвращает нормализованную строку: XXX-XX-XXXX.
+    """
+    if not text:
+        return None
+    # 1. С явной меткой SSN: SSN: 123-45-6789 или SSN: 123456789
+    m_label = re.search(r'(?:SSN|Social\s*Security(?:\s*Number)?|Soc\s*Sec)[:\s]+(\d{3}[\s-]?\d{2}[\s-]?\d{4})\b', text, re.IGNORECASE)
+    if m_label:
+        digits = re.sub(r'\D', '', m_label.group(1))
+        if len(digits) == 9:
+            return f"{digits[:3]}-{digits[3:5]}-{digits[5:]}"
+
+    # 2. Поиск стандартного паттерна XXX-XX-XXXX в тексте
+    m_std = re.search(r'\b(?!000|666|9\d\d)(\d{3})-(?!00)(\d{2})-(?!0000)(\d{4})\b', text)
+    if m_std:
+        return f"{m_std.group(1)}-{m_std.group(2)}-{m_std.group(3)}"
+
+    return None
 
 MONTH_NAMES = {
     "jan": 1, "янв": 1, "feb": 2, "фев": 2, "mar": 3, "мар": 3,
@@ -159,13 +182,15 @@ def parse_account_from_info_txt(info_text: str, context_name: str = "") -> Parse
         reg_date = today
 
     normalized_data = f"{state} | {name} | {date_info}"
+    ssn = extract_ssn(info_text)
     return {
         "state": state,
         "name": name,
         "date_info": date_info,
         "data": normalized_data,
-        "raw_data": info_text[:200],
+        "raw_data": info_text,
         "registration_date": reg_date,
+        "ssn": ssn,
     }
 
 def calculate_registration_date(day: int, month: int, explicit_year: int | None = None) -> date:
@@ -317,6 +342,7 @@ def parse_account_line(line: str) -> ParsedAccount | None:
     if extracted:
         state, name, date_info, reg_date = extracted
         normalized_data = f"{state} | {name} | {date_info}"
+        ssn = extract_ssn(raw)
         return {
             "state": state,
             "name": name,
@@ -324,6 +350,7 @@ def parse_account_line(line: str) -> ParsedAccount | None:
             "data": normalized_data,
             "raw_data": raw,
             "registration_date": reg_date,
+            "ssn": ssn,
         }
 
     return None
@@ -392,6 +419,7 @@ def parse_account_from_log_block(
         reg_date = today
 
     normalized_data = f"{state} | {name} | {date_info}"
+    ssn = extract_ssn(b)
     return {
         "state": state,
         "name": name[:100],
@@ -399,6 +427,7 @@ def parse_account_from_log_block(
         "data": normalized_data,
         "raw_data": b,
         "registration_date": reg_date,
+        "ssn": ssn,
     }
 
 def parse_accounts_from_text(text: str) -> list[ParsedAccount]:
@@ -503,6 +532,14 @@ def find_cookie_for_account_file(fpath: str) -> str | None:
             continue
     return None
 
+def get_account_dedup_key(acc: ParsedAccount) -> str:
+    """
+    Главный ключ дедупликации: SSN. Если SSN нет — используется нормализованная строка data.
+    """
+    if acc.get("ssn"):
+        return f"SSN:{acc['ssn']}"
+    return f"DATA:{acc.get('data', '').strip().upper()}"
+
 def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount], int]:
     results: list[ParsedAccount] = []
     seen = set()
@@ -558,7 +595,7 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
                 if acc:
                     if companion_cookie and not acc.get("cookie_data"):
                         acc["cookie_data"] = companion_cookie
-                    key = acc["data"].upper()
+                    key = get_account_dedup_key(acc)
                     if key not in seen:
                         seen.add(key)
                         results.append(acc)
@@ -570,7 +607,7 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
             if acc:
                 if companion_cookie and not acc.get("cookie_data"):
                     acc["cookie_data"] = companion_cookie
-                key = acc["data"].upper()
+                key = get_account_dedup_key(acc)
                 if key not in seen:
                     seen.add(key)
                     results.append(acc)
@@ -582,7 +619,7 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
             if acc:
                 if companion_cookie and not acc.get("cookie_data"):
                     acc["cookie_data"] = companion_cookie
-                key = acc["data"].upper()
+                key = get_account_dedup_key(acc)
                 if key not in seen:
                     seen.add(key)
                     results.append(acc)
@@ -601,7 +638,7 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
             if parsed:
                 if companion_cookie and not parsed.get("cookie_data"):
                     parsed["cookie_data"] = companion_cookie
-                key = parsed["data"].upper()
+                key = get_account_dedup_key(parsed)
                 if key not in seen:
                     seen.add(key)
                     results.append(parsed)
@@ -836,11 +873,49 @@ async def sync_all_accounts_age_tiers(session: AsyncSession) -> int:
 
     return migrated_count
 
+async def filter_duplicate_accounts(session: AsyncSession, accounts_data: list[ParsedAccount]) -> list[ParsedAccount]:
+    """
+    Фильтрует дубликаты аккаунтов перед вставкой в БД.
+    Главный ключ дедупликации — SSN. Если SSN отсутствует — используется нормализованная строка data.
+    """
+    if not accounts_data:
+        return []
+
+    # 1. Извлекаем все SSN кандидатов и проверяем их наличие в базе
+    ssn_cands = [acc["ssn"] for acc in accounts_data if acc.get("ssn")]
+    db_existing_ssns = set()
+    if ssn_cands:
+        ssn_res = await session.execute(select(Account.ssn).where(Account.ssn.in_(ssn_cands)))
+        db_existing_ssns = {s for s in ssn_res.scalars().all() if s}
+
+    # 2. Проверяем также data для аккаунтов без SSN
+    data_cands = [acc["data"].upper() for acc in accounts_data if acc.get("data")]
+    db_existing_data = set()
+    if data_cands:
+        data_res = await session.execute(select(Account.data).where(Account.data.in_(data_cands)))
+        db_existing_data = {d.upper() for d in data_res.scalars().all() if d}
+
+    unique_accounts = []
+    seen_batch_keys = set()
+    for acc in accounts_data:
+        key = get_account_dedup_key(acc)
+        if key in seen_batch_keys:
+            continue
+        if acc.get("ssn") and acc["ssn"] in db_existing_ssns:
+            continue
+        if acc.get("data") and acc["data"].upper() in db_existing_data:
+            continue
+        seen_batch_keys.add(key)
+        unique_accounts.append(acc)
+
+    return unique_accounts
+
 async def add_accounts_bulk(
     session: AsyncSession,
     product_id: int,
     accounts_data: list[ParsedAccount]
 ) -> int:
+    accounts_data = await filter_duplicate_accounts(session, accounts_data)
     if not accounts_data:
         return 0
 
@@ -855,6 +930,7 @@ async def add_accounts_bulk(
             name=acc["name"],
             date_info=acc["date_info"],
             registration_date=acc.get("registration_date"),
+            ssn=acc.get("ssn"),
             data=acc["data"],
             raw_data=acc.get("raw_data"),
             cookie_data=acc.get("cookie_data"),
@@ -875,6 +951,7 @@ async def add_accounts_auto_age_tiers(
     """
     Автоматически распределяет аккаунты по товарам-тирам в подкатегории на основе их возраста (отлёжки).
     """
+    accounts_data = await filter_duplicate_accounts(session, accounts_data)
     if not accounts_data:
         return {}
 
@@ -904,6 +981,7 @@ async def add_accounts_auto_age_tiers(
                     name=acc["name"],
                     date_info=acc["date_info"],
                     registration_date=acc.get("registration_date"),
+                    ssn=acc.get("ssn"),
                     data=acc["data"],
                     raw_data=acc.get("raw_data"),
                     cookie_data=acc.get("cookie_data"),
@@ -1010,8 +1088,9 @@ async def add_accounts_to_category_auto_age(
     accounts_data: list[ParsedAccount]
 ) -> dict[str, int]:
     """
-    Распределяет аккаунты по товарам-тирам в рамках указанной Категории.
+    Распределяет аккаунты по товарам-тирам в рамках указанной Категории с дедупликацией по SSN.
     """
+    accounts_data = await filter_duplicate_accounts(session, accounts_data)
     if not accounts_data:
         return {}
 
@@ -1041,6 +1120,7 @@ async def add_accounts_to_category_auto_age(
                     name=acc["name"][:250],
                     date_info=acc["date_info"][:30],
                     registration_date=acc.get("registration_date"),
+                    ssn=acc.get("ssn"),
                     data=acc["data"],
                     raw_data=acc.get("raw_data"),
                     cookie_data=acc.get("cookie_data"),

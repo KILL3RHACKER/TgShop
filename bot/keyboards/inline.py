@@ -20,6 +20,7 @@ from bot.keyboards.callbacks import (
     ChatViewCD,
     ChatReplyCD,
     DeleteChatCD,
+    EscalateDisputeCD,
     AdminReplaceSelectCD,
     AdminConfirmReplaceCD,
 )
@@ -266,12 +267,22 @@ def get_my_orders_kb(orders: list[Order]) -> InlineKeyboardMarkup:
     builder.adjust(1)
     return builder.as_markup()
 
-def get_dispute_admin_kb(order_id: int) -> InlineKeyboardMarkup:
+def get_dispute_moderator_kb(order_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура для Модератора: ответить, дать замену, позвать Администратора"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="💬 Ответить в чат спора", callback_data=ReplyDisputeCD(order_id=order_id))
+    builder.button(text="💬 Ответить в чат", callback_data=ReplyDisputeCD(order_id=order_id))
     builder.button(text="🔄 Выдать замену со склада", callback_data=AdminReplaceSelectCD(order_id=order_id, page=1))
-    builder.button(text="✅ Вернуть покупателю", callback_data=ResolveDisputeCD(order_id=order_id, action="refund"))
-    builder.button(text="❌ Закрыть спор", callback_data=ResolveDisputeCD(order_id=order_id, action="reject"))
+    builder.button(text="⚡️ Позвать Администратора", callback_data=EscalateDisputeCD(order_id=order_id))
+    builder.adjust(1, 1, 1)
+    return builder.as_markup()
+
+def get_dispute_admin_kb(order_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура для Администратора: окончательный вердикт на основе доказательств и репутации"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💬 Ответить в чат", callback_data=ReplyDisputeCD(order_id=order_id))
+    builder.button(text="🔄 Выдать замену со склада", callback_data=AdminReplaceSelectCD(order_id=order_id, page=1))
+    builder.button(text="✅ Одобрить возврат покупателю", callback_data=ResolveDisputeCD(order_id=order_id, action="refund"))
+    builder.button(text="❌ Закрыть в пользу магазина", callback_data=ResolveDisputeCD(order_id=order_id, action="reject"))
     builder.adjust(1, 1, 2)
     return builder.as_markup()
 

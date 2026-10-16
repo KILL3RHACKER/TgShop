@@ -238,9 +238,45 @@
                 {% endif %}
             </div>
             <p class="text-xs text-slate-400 mt-1">
-                Покупатель: <b class="text-white">@{{ o.user.username if o.user and o.user.username else o.user_id }}</b> | Сумма: <b class="text-emerald-400">${{ o.amount }}</b> | Товар: <code class="text-slate-300">{{ o.account.data if o.account else '—' }}</code>
+                Покупатель: <b class="text-white">@{{ o.user.username if o.user and o.user.username else o.user_id }}</b> | Сумма: <b class="text-emerald-400">${{ o.amount }}</b> | Товар: <code class="text-slate-300">{{ o.account.data if o.account else (o.account_data or '—') }}</code>
             </p>
         </div>
+
+        <!-- Buyer Reputation Dossier -->
+        {% set rep = reputations.get(o.user_id) %}
+        {% if rep %}
+        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 mb-3 text-xs">
+            <div class="flex items-center justify-between mb-2">
+                <span class="font-bold text-white flex items-center space-x-1.5">
+                    <i class="fa-solid fa-id-card text-indigo-400"></i>
+                    <span>Досье репутации покупателя:</span>
+                </span>
+                <span class="font-semibold text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-200 border border-slate-700">
+                    {{ rep.trust_label }}
+                </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                    <span class="text-slate-400 block">Всего покупок:</span>
+                    <span class="font-bold text-white">{{ rep.total_orders }} шт. (${{ "%.2f"|format(rep.total_spent) }})</span>
+                </div>
+                <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                    <span class="text-slate-400 block">История диспутов:</span>
+                    <span class="font-bold text-amber-400">{{ rep.disputes_count }} (Возвратов: {{ rep.refunded_count }})</span>
+                </div>
+                <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                    <span class="text-slate-400 block">Средний отзыв:</span>
+                    <span class="font-bold text-amber-300">⭐️ {{ "%.1f"|format(rep.avg_rating) }} ({{ rep.reviews_count }} шт.)</span>
+                </div>
+                <div class="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                    <span class="text-slate-400 block">Статус дела:</span>
+                    <span class="font-bold {% if o.escalated_to_admin %}text-rose-400 animate-pulse{% else %}text-indigo-400{% endif %}">
+                        {% if o.escalated_to_admin %}⚡️ Эскалирован Админу{% else %}🛡 1-я линия (Модерация){% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Chat Messages -->
         <div class="flex-1 overflow-y-auto space-y-3 pr-2 mb-4">

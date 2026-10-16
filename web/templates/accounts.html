@@ -149,6 +149,7 @@
                             <th class="py-3 px-3">ID</th>
                             <th class="py-3 px-3">Штат (ST)</th>
                             <th class="py-3 px-3">Имя Фамилия</th>
+                            <th class="py-3 px-3 text-amber-400">SSN</th>
                             <th class="py-3 px-3">Дата (DD.MM)</th>
                             <th class="py-3 px-3">Отлёжка (Дней)</th>
                             <th class="py-3 px-3">Товар / Тир</th>
@@ -175,6 +176,9 @@
                                 <td class="py-3 px-3 font-semibold text-slate-100">
                                     {{ acc.name }}
                                 </td>
+                                <td class="py-3 px-3 font-mono text-xs text-amber-400 font-semibold">
+                                    {{ acc.ssn if acc.ssn else '—' }}
+                                </td>
                                 <td class="py-3 px-3 font-mono text-xs text-slate-300">
                                     {{ acc.date_info }}
                                 </td>
@@ -193,7 +197,7 @@
                                     </span>
                                     {% else %}
                                     <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
-                                        {{ age }} дн. (&lt;7)
+                                        {{ age }} дн.
                                     </span>
                                     {% endif %}
                                 </td>
@@ -226,9 +230,19 @@
                                     {{ acc.created_at | dt }}
                                 </td>
                                 <td class="py-3 px-3 text-right">
-                                    <button type="button" onclick="deleteSingleAccount({{ acc.id }})" title="Удалить" class="text-slate-500 hover:text-rose-400 p-1 transition-colors">
-                                        <i class="fa-solid fa-trash-can text-sm"></i>
-                                    </button>
+                                    <div class="flex items-center justify-end space-x-1.5">
+                                        <button type="button" onclick='showAccountData({{ acc.id }}, "Info: {{ acc.name }}", {{ (acc.raw_data or acc.data or "") | tojson }})' title="Быстрый просмотр Info" class="px-2 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg border border-indigo-500/30 text-[11px] font-medium transition-colors flex items-center space-x-1">
+                                            <i class="fa-solid fa-file-lines text-[10px]"></i>
+                                            <span>Info</span>
+                                        </button>
+                                        <button type="button" onclick='showAccountData({{ acc.id }}, "Cookies: {{ acc.name }}", {{ (acc.cookie_data or "Cookies отсутствуют") | tojson }})' title="Быстрый просмотр Cookies" class="px-2 py-1 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white rounded-lg border border-amber-500/30 text-[11px] font-medium transition-colors flex items-center space-x-1">
+                                            <i class="fa-solid fa-cookie text-[10px]"></i>
+                                            <span>Cookie</span>
+                                        </button>
+                                        <button type="button" onclick="deleteSingleAccount({{ acc.id }})" title="Удалить" class="text-slate-500 hover:text-rose-400 p-1 transition-colors">
+                                            <i class="fa-solid fa-trash-can text-sm"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -363,10 +377,58 @@
     <input type="hidden" name="product_id" value="{{ selected_product_id }}">
     {% endif %}
 </form>
+
+<!-- Modal: Quick View Account Info / Cookie -->
+<div id="quick-view-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative flex flex-col max-h-[85vh]">
+        <button onclick="closeModal('quick-view-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+        <h3 class="text-base font-bold text-white flex items-center space-x-2 mb-3" id="quick-modal-title">
+            <i class="fa-solid fa-file-lines text-indigo-400"></i>
+            <span>Просмотр данных</span>
+        </h3>
+        <div class="flex-1 overflow-y-auto bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs text-slate-200 whitespace-pre-wrap selection:bg-indigo-600 select-all" id="quick-modal-body">
+        </div>
+        <div class="pt-3.5 flex justify-between items-center border-t border-slate-800/80 mt-2">
+            <span class="text-xs text-slate-500" id="quick-modal-len"></span>
+            <div class="flex items-center space-x-2">
+                <button type="button" onclick="copyQuickViewContent()" id="copy-quick-btn" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-colors">
+                    <i class="fa-solid fa-copy"></i>
+                    <span>Скопировать</span>
+                </button>
+                <button type="button" onclick="closeModal('quick-view-modal')" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl transition-colors">
+                    Закрыть
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    let currentQuickContent = "";
+
+    function showAccountData(id, title, content) {
+        currentQuickContent = content || "";
+        document.getElementById('quick-modal-title').innerHTML = '<i class="fa-solid fa-eye text-indigo-400 mr-2"></i>' + title;
+        document.getElementById('quick-modal-body').textContent = currentQuickContent;
+        document.getElementById('quick-modal-len').textContent = 'Символов: ' + currentQuickContent.length;
+        const copyBtn = document.getElementById('copy-quick-btn');
+        copyBtn.innerHTML = '<i class="fa-solid fa-copy"></i><span>Скопировать</span>';
+        copyBtn.className = "px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-colors";
+        openModal('quick-view-modal');
+    }
+
+    function copyQuickViewContent() {
+        if (!currentQuickContent) return;
+        navigator.clipboard.writeText(currentQuickContent).then(() => {
+            const copyBtn = document.getElementById('copy-quick-btn');
+            copyBtn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i><span>Скопировано!</span>';
+            copyBtn.className = "px-3.5 py-1.5 bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-colors";
+        });
+    }
     function deleteSingleAccount(id) {
         if (confirm('Удалить аккаунт #' + id + '?')) {
             document.getElementById('single-delete-id').value = id;
