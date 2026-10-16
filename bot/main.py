@@ -18,6 +18,7 @@ from bot.handlers.profile import profile_router
 from bot.handlers.topup import topup_router
 from bot.handlers.admin import admin_router
 from bot.handlers.disputes import disputes_router
+from web.services import sync_all_accounts_age_tiers
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,6 +46,21 @@ async def hold_release_worker(session_pool) -> None:
             break
         except Exception as e:
             logger.error(f"Error in hold_release_worker: {e}")
+
+async def age_tier_sync_worker(session_pool) -> None:
+    """Фоновый воркер: авто-сортировка и перевод аккаунтов в старшие тиры (15+, 30+) по мере взросления."""
+    while True:
+        try:
+            async with session_pool() as session:
+                migrated = await sync_all_accounts_age_tiers(session)
+                if migrated > 0:
+                    logger.info(f"Age tier sync: {migrated} accounts migrated to older tier.")
+            await asyncio.sleep(3600)  # Check every hour
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error in age_tier_sync_worker: {e}")
+            await asyncio.sleep(60)
 
 async def main() -> None:
     # Инициализация БД и сид данных
@@ -74,15 +90,17 @@ async def main() -> None:
         disputes_router
     )
 
-    # Фоновая задача разморозки 24ч холда
-    worker_task = asyncio.create_task(hold_release_worker(async_session))
+    # Фоновые задачи: разморозка 24ч холда и авто-синхронизация тиров отлёжки
+    hold_task = asyncio.create_task(hold_release_worker(async_session))
+    age_sync_task = asyncio.create_task(age_tier_sync_worker(async_session))
 
     logger.info("Bot starting...")
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
     finally:
-        worker_task.cancel()
+        hold_task.cancel()
+        age_sync_task.cancel()
         await bot.session.close()
         logger.info("Bot stopped.")
 

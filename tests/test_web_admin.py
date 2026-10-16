@@ -92,24 +92,24 @@ def test_full_flow():
     # 4. Products view (3-tier catalog)
     resp = client.get("/products")
     assert resp.status_code == 200
-    assert "Категории магазина" in resp.text
+    assert "Главные категории" in resp.text
     assert "Подкатегории" in resp.text
     assert "Список товаров" in resp.text
 
     # 5. Accounts view
     resp = client.get("/accounts")
     assert resp.status_code == 200
-    assert "IVAN IVANOV" in resp.text or "JOHN DOE" in resp.text
+    assert "JOHN DOE" in resp.text or "MICHAEL SMITH" in resp.text
 
     # 6. Upload ZIP Accounts: supports any date format, normalized to DD.MM
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w") as zf:
-        zf.writestr("test_zip.txt", "zip user 1, 11/11:tail\nzip user 2, 12.12 extra\n")
+        zf.writestr("test_zip.txt", "CA | zip user 1 | 11/11:tail\nNY, zip user 2, 12.12 extra\n")
     zip_buf.seek(0)
 
     resp = client.post(
         "/accounts/upload-archive",
-        data={"product_id": 1},
+        data={"product_id": 1, "upload_mode": "specific_product"},
         files={"archive_file": ("accounts.zip", zip_buf, "application/zip")}
     )
     assert resp.status_code == 303
@@ -123,10 +123,10 @@ def test_full_flow():
 
     # 7. Delete by list: matches DD.MM
     resp = client.post(
-        "/accounts/delete-by-list",
+        "/accounts/delete-list",
         data={
             "product_id": 1,
-            "delete_text": "ZIP USER 1, 11.11\nZIP USER 2, 12.12"
+            "list_data": "CA | ZIP USER 1 | 11.11\nNY | ZIP USER 2 | 12.12"
         }
     )
     assert resp.status_code == 303

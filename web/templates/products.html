@@ -9,9 +9,9 @@
         <div>
             <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
                 <i class="fa-solid fa-layer-group text-indigo-400"></i>
-                <span>Каталог товаров</span>
+                <span>Каталог товаров (Категории &rarr; Товары)</span>
             </h2>
-            <p class="text-sm text-slate-400 mt-0.5">3 уровня структуры: Категория &rarr; Подкатегория &rarr; Товар (аккаунты загружаются в Товар)</p>
+            <p class="text-sm text-slate-400 mt-0.5">Структура: Категория-цена &gt; Товар (ST | NAME SURNAME | DD.MM) с авто-сортировкой 7, 15, 30+ дней</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
@@ -25,7 +25,7 @@
             </button>
             <button onclick="openModal('add-product-modal')" class="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
                 <i class="fa-solid fa-plus"></i>
-                <span>+ Товар</span>
+                <span>+ Товар (Тир)</span>
             </button>
         </div>
     </div>
@@ -35,7 +35,7 @@
         <h3 class="text-sm font-semibold text-white mb-3 flex items-center justify-between">
             <span class="flex items-center space-x-2">
                 <i class="fa-regular fa-folder text-indigo-400"></i>
-                <span>1. Категории магазина</span>
+                <span>1. Главные категории</span>
             </span>
             <span class="text-xs text-slate-500">Всего: {{ categories | length }}</span>
         </h3>
@@ -69,7 +69,7 @@
         <h3 class="text-sm font-semibold text-white mb-3 flex items-center justify-between">
             <span class="flex items-center space-x-2">
                 <i class="fa-solid fa-folder-tree text-indigo-400"></i>
-                <span>2. Подкатегории</span>
+                <span>2. Подкатегории и базы</span>
             </span>
             <span class="text-xs text-slate-500">Всего: {{ subcategories | length }}</span>
         </h3>
@@ -77,21 +77,34 @@
         {% if subcategories %}
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {% for sub in subcategories %}
-            <div class="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between">
-                <div>
-                    <h4 class="font-medium text-white text-sm">{{ sub.name }}</h4>
-                    <p class="text-xs text-indigo-400 mt-0.5">В категории: {{ sub.category.name if sub.category else '—' }}</p>
-                    <p class="text-[11px] text-slate-400">{{ sub.products | length }} товаров</p>
+            <div class="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col justify-between space-y-3">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <h4 class="font-medium text-white text-sm">{{ sub.name }}</h4>
+                        <p class="text-xs text-indigo-400 mt-0.5">В категории: {{ sub.category.name if sub.category else '—' }}</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5">{{ sub.products | length }} товаров/тиров</p>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <button type="button" onclick="openEditSubcategoryModal({{ sub.id }}, {{ sub.category_id }}, '{{ sub.name | replace("'", "\\'") }}')" title="Редактировать" class="text-slate-400 hover:text-white p-1.5 transition-colors">
+                            <i class="fa-solid fa-pen-to-square text-xs"></i>
+                        </button>
+                        <form method="POST" action="/products/subcategories/{{ sub.id }}/delete" onsubmit="return confirm('Удалить подкатегорию «{{ sub.name }}» и связанные товары?')">
+                            <button type="submit" title="Удалить подкатегорию" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        </form>
+                    </div>
                 </div>
-                <div class="flex items-center space-x-1">
-                    <button type="button" onclick="openEditSubcategoryModal({{ sub.id }}, {{ sub.category_id }}, '{{ sub.name | replace("'", "\\'") }}')" title="Редактировать" class="text-slate-400 hover:text-white p-1.5 transition-colors">
-                        <i class="fa-solid fa-pen-to-square text-xs"></i>
-                    </button>
-                    <form method="POST" action="/products/subcategories/{{ sub.id }}/delete" onsubmit="return confirm('Удалить подкатегорию «{{ sub.name }}» и связанные товары?')">
-                        <button type="submit" title="Удалить подкатегорию" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
-                            <i class="fa-solid fa-trash-can text-xs"></i>
+                <div class="pt-2 border-t border-slate-900 flex items-center justify-between">
+                    <form method="POST" action="/products/subcategories/{{ sub.id }}/create-age-tiers">
+                        <button type="submit" class="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-medium border border-indigo-500/20 transition-all flex items-center space-x-1">
+                            <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                            <span>Создать тиры 7+, 15+, 30+</span>
                         </button>
                     </form>
+                    <a href="/accounts?subcategory_id={{ sub.id }}" class="text-xs text-slate-400 hover:text-white transition-colors">
+                        Склад &rarr;
+                    </a>
                 </div>
             </div>
             {% endfor %}
@@ -106,9 +119,9 @@
         <div class="p-5 border-b border-slate-800 flex items-center justify-between">
             <h3 class="text-base font-semibold text-white flex items-center space-x-2">
                 <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
-                <span>3. Список товаров (Товары на витрине)</span>
+                <span>3. Список товаров и тиров (Категории-цены на витрине)</span>
             </h3>
-            <span class="text-xs text-slate-400">Всего товаров: {{ products | length }}</span>
+            <span class="text-xs text-slate-400">Всего позиций: {{ products | length }}</span>
         </div>
 
         <div class="overflow-x-auto">
@@ -116,12 +129,12 @@
                 <thead>
                     <tr class="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 bg-slate-950/50">
                         <th class="py-3 px-4">ID</th>
-                        <th class="py-3 px-4">Товар</th>
-                        <th class="py-3 px-4">Категория / Подкатегория</th>
+                        <th class="py-3 px-4">Товар / Тир</th>
+                        <th class="py-3 px-4">Диапазон отлёжки</th>
+                        <th class="py-3 px-4">Категория</th>
                         <th class="py-3 px-4">Цена</th>
                         <th class="py-3 px-4">В наличии (Склад)</th>
                         <th class="py-3 px-4">Продано</th>
-                        <th class="py-3 px-4">Описание</th>
                         <th class="py-3 px-4 text-right">Действия</th>
                     </tr>
                 </thead>
@@ -133,6 +146,21 @@
                         <tr class="hover:bg-slate-800/40 transition-colors">
                             <td class="py-3.5 px-4 font-mono text-xs text-slate-500">#{{ prod.id }}</td>
                             <td class="py-3.5 px-4 font-semibold text-white">{{ prod.name }}</td>
+                            <td class="py-3.5 px-4 text-xs">
+                                {% if prod.min_days is not none %}
+                                    {% if prod.max_days is not none %}
+                                    <span class="px-2 py-0.5 rounded-md bg-indigo-950/60 text-indigo-300 border border-indigo-800/50 font-mono">
+                                        {{ prod.min_days }} - {{ prod.max_days }} дн.
+                                    </span>
+                                    {% else %}
+                                    <span class="px-2 py-0.5 rounded-md bg-purple-950/60 text-purple-300 border border-purple-800/50 font-mono">
+                                        {{ prod.min_days }}+ дн.
+                                    </span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-slate-500 font-mono text-xs">Без ограничений</span>
+                                {% endif %}
+                            </td>
                             <td class="py-3.5 px-4 text-xs">
                                 <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
                                     {{ prod.subcategory.category.name if prod.subcategory and prod.subcategory.category else '—' }} &rarr; {{ prod.subcategory.name if prod.subcategory else '—' }}
@@ -155,16 +183,13 @@
                                     {{ sold }} акк.
                                 </a>
                             </td>
-                            <td class="py-3.5 px-4 text-xs text-slate-400 max-w-xs truncate" title="{{ prod.description }}">
-                                {{ prod.description or '—' }}
-                            </td>
                             <td class="py-3.5 px-4 text-right">
                                 <div class="inline-flex items-center space-x-1.5">
                                     <a href="/accounts?product_id={{ prod.id }}" title="Загрузить аккаунты" class="px-2 py-1 rounded-lg bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 text-xs font-medium transition-colors">
                                         <i class="fa-solid fa-file-arrow-up mr-1"></i> Аккаунты
                                     </a>
                                     <button type="button"
-                                        onclick="openEditProductModal({{ prod.id }}, {{ prod.subcategory_id }}, '{{ prod.name | replace("'", "\\'") }}', {{ prod.price }}, '{{ (prod.description or '') | replace("'", "\\'") | replace("\n", "\\n") }}')"
+                                        onclick="openEditProductModal({{ prod.id }}, {{ prod.subcategory_id }}, '{{ prod.name | replace("'", "\\'") }}', {{ prod.price }}, '{{ (prod.description or '') | replace("'", "\\'") | replace("\n", "\\n") }}', {{ prod.min_days if prod.min_days is not none else 'null' }}, {{ prod.max_days if prod.max_days is not none else 'null' }})"
                                         title="Редактировать товар"
                                         class="text-slate-400 hover:text-white p-1.5 transition-colors">
                                         <i class="fa-solid fa-pen-to-square text-xs"></i>
@@ -181,7 +206,7 @@
                     {% else %}
                         <tr>
                             <td colspan="8" class="py-8 text-center text-slate-500 text-sm">
-                                Товаров пока нет. Создайте подкатегорию, а затем нажмите «+ Товар».
+                                Товаров пока нет. Создайте подкатегорию, а затем нажмите «+ Товар» или кнопку «Создать тиры 7+, 15+, 30+».
                             </td>
                         </tr>
                     {% endif %}
@@ -204,7 +229,7 @@
         <form method="POST" action="/products/categories/create" class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название категории *</label>
-                <input type="text" name="name" required placeholder="Например: Банки США или VPN"
+                <input type="text" name="name" required placeholder="Например: Аккаунты USA или Chase"
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div class="pt-2 flex justify-end space-x-2">
@@ -241,7 +266,7 @@
             </div>
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название подкатегории *</label>
-                <input type="text" name="name" required placeholder="Например: Truist или Chase"
+                <input type="text" name="name" required placeholder="Например: Общая база или США (Chase)"
                     class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div class="pt-2 flex justify-end space-x-2">
@@ -299,7 +324,7 @@
         </button>
         <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-4">
             <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
-            <span>Добавить новый товар</span>
+            <span>Добавить новый товар / тир</span>
         </h3>
         <form method="POST" action="/products/create" class="space-y-4">
             <div>
@@ -315,19 +340,34 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                     <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Название товара *</label>
-                    <input type="text" name="name" required placeholder="Например: 7 Дней или 15 Дней"
+                    <input type="text" name="name" required placeholder="Например: Отлёжка 7+ Дней"
                         class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Цена в USDT ($) *</label>
-                    <input type="number" step="0.01" min="0" name="price" required placeholder="100.00"
+                    <input type="number" step="0.01" min="0" name="price" required placeholder="10.00"
                         class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Мин. дней отлёжки</label>
+                    <input type="number" min="0" name="min_days" placeholder="Например: 7"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <span class="text-[11px] text-slate-500">Для тира 7+ укажите 7</span>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Макс. дней отлёжки</label>
+                    <input type="number" min="0" name="max_days" placeholder="Например: 14 (пусто для 30+)"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <span class="text-[11px] text-slate-500">Оставьте пустым для безлимита (30+)</span>
                 </div>
             </div>
 
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Описание товара</label>
-                <textarea name="description" rows="3" placeholder="Краткое описание товара для покупателя в боте..."
+                <textarea name="description" rows="2" placeholder="Краткое описание товара для покупателя в боте..."
                     class="w-full p-3 text-xs rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
             </div>
 
@@ -351,7 +391,7 @@
         </button>
         <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-4">
             <i class="fa-solid fa-pen-to-square text-indigo-400"></i>
-            <span>Редактировать товар</span>
+            <span>Редактировать товар / тир</span>
         </h3>
         <form id="edit-product-form" method="POST" action="" class="space-y-4">
             <div>
@@ -374,9 +414,22 @@
                 </div>
             </div>
 
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Мин. дней отлёжки</label>
+                    <input type="number" min="0" id="edit-prod-min-days" name="min_days"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Макс. дней отлёжки</label>
+                    <input type="number" min="0" id="edit-prod-max-days" name="max_days"
+                        class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Описание</label>
-                <textarea id="edit-prod-desc" name="description" rows="3" class="w-full p-3 text-xs rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                <textarea id="edit-prod-desc" name="description" rows="2" class="w-full p-3 text-xs rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
             </div>
 
             <div class="pt-2 flex justify-end space-x-2">
@@ -401,12 +454,14 @@
         openModal('edit-subcategory-modal');
     }
 
-    function openEditProductModal(id, subcategoryId, name, price, description) {
+    function openEditProductModal(id, subcategoryId, name, price, description, minDays, maxDays) {
         document.getElementById('edit-product-form').action = '/products/' + id + '/edit';
         document.getElementById('edit-prod-subcat').value = subcategoryId;
         document.getElementById('edit-prod-name').value = name;
         document.getElementById('edit-prod-price').value = price;
         document.getElementById('edit-prod-desc').value = description;
+        document.getElementById('edit-prod-min-days').value = minDays !== null ? minDays : '';
+        document.getElementById('edit-prod-max-days').value = maxDays !== null ? maxDays : '';
         openModal('edit-product-modal');
     }
 </script>

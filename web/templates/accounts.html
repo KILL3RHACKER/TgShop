@@ -9,12 +9,20 @@
         <div>
             <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
                 <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
-                <span>Склад аккаунтов</span>
+                <span>Склад аккаунтов (ST | NAME SURNAME | DD.MM)</span>
             </h2>
-            <p class="text-sm text-slate-400 mt-0.5">Управление инвентарем: пакетная загрузка ZIP и удаление</p>
+            <p class="text-sm text-slate-400 mt-0.5">Авто-сортировка по отлёжке 7+, 15+, 30+ дней, загрузка архивами ZIP / RAR</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Button: Sync Age Tiers -->
+            <form method="POST" action="/accounts/sync-age" class="inline">
+                <button type="submit" title="Пересчитать возраст аккаунтов и перевести созревшие в 15+, 30+" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium rounded-xl transition-all shadow-sm">
+                    <i class="fa-solid fa-arrows-rotate text-indigo-400"></i>
+                    <span>Синхронизировать отлёжку</span>
+                </button>
+            </form>
+
             <!-- Button: Upload Archive (ZIP / RAR) -->
             <button onclick="openModal('zip-modal')" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
                 <i class="fa-solid fa-file-zipper"></i>
@@ -62,25 +70,36 @@
 
     <!-- Filter & Search Bar -->
     <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
-        <form method="GET" action="/accounts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <form method="GET" action="/accounts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <!-- Search Query -->
             <div class="relative">
                 <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
                     <i class="fa-solid fa-magnifying-glass text-xs"></i>
                 </span>
-                <input type="text" name="q" value="{{ q }}" placeholder="Поиск (Имя, Дата, Данные)..."
+                <input type="text" name="q" value="{{ q }}" placeholder="Поиск (Штат, Имя, Дата)..."
                     class="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
 
-            <!-- Product Filter -->
+            <!-- Product / Tier Filter -->
             <div>
                 <select name="product_id" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="">Все товары</option>
+                    <option value="">Все товары и тиры</option>
                     {% for p in products %}
                     <option value="{{ p.id }}" {% if selected_product_id == p.id %}selected{% endif %}>
                         {{ p.subcategory.name if p.subcategory else '' }} &rarr; {{ p.name }}
                     </option>
                     {% endfor %}
+                </select>
+            </div>
+
+            <!-- Age Filter -->
+            <div>
+                <select name="age_filter" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="all" {% if age_filter == 'all' %}selected{% endif %}>Любая отлёжка</option>
+                    <option value="fresh" {% if age_filter == 'fresh' %}selected{% endif %}>Свежие (до 7 дн.)</option>
+                    <option value="7" {% if age_filter == '7' %}selected{% endif %}>Отлёжка 7+ (7-14 дн.)</option>
+                    <option value="15" {% if age_filter == '15' %}selected{% endif %}>Отлёжка 15+ (15-29 дн.)</option>
+                    <option value="30" {% if age_filter == '30' %}selected{% endif %}>Отлёжка 30+ (30+ дн.)</option>
                 </select>
             </div>
 
@@ -97,7 +116,7 @@
             <div class="flex items-center space-x-2">
                 <button type="submit" class="flex-1 py-2 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium border border-slate-700 transition-colors flex items-center justify-center space-x-1.5">
                     <i class="fa-solid fa-filter text-xs"></i>
-                    <span>Фильтровать</span>
+                    <span>Фильтр</span>
                 </button>
                 <a href="/accounts" title="Сбросить" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl border border-slate-700 text-sm">
                     <i class="fa-solid fa-rotate-left"></i>
@@ -106,12 +125,8 @@
         </form>
     </div>
 
-    <!-- Bulk Action Bar (Visible when checkboxes are selected) -->
-    <form id="bulk-delete-form" method="POST" action="/accounts/delete-selected">
-        {% if selected_product_id %}
-        <input type="hidden" name="product_id" value="{{ selected_product_id }}">
-        {% endif %}
-
+    <!-- Bulk Action Bar -->
+    <form id="bulk-delete-form" method="POST" action="/accounts/delete-bulk">
         <div id="bulk-actions" class="hidden mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 flex items-center justify-between">
             <div class="flex items-center space-x-3 text-rose-200 text-sm font-medium">
                 <i class="fa-solid fa-check-double text-rose-400"></i>
@@ -133,9 +148,11 @@
                                 <input type="checkbox" id="select-all" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer">
                             </th>
                             <th class="py-3 px-3">ID</th>
-                            <th class="py-3 px-3">Товар</th>
+                            <th class="py-3 px-3">Штат (ST)</th>
                             <th class="py-3 px-3">Имя Фамилия</th>
                             <th class="py-3 px-3">Дата (DD.MM)</th>
+                            <th class="py-3 px-3">Отлёжка (Дней)</th>
+                            <th class="py-3 px-3">Товар / Тир</th>
                             <th class="py-3 px-3">Статус</th>
                             <th class="py-3 px-3">Покупатель</th>
                             <th class="py-3 px-3">Добавлен</th>
@@ -145,21 +162,46 @@
                     <tbody class="divide-y divide-slate-800/60 text-slate-300">
                         {% if accounts %}
                             {% for acc in accounts %}
+                            {% set age = acc.age_days %}
                             <tr class="hover:bg-slate-800/40 transition-colors">
                                 <td class="py-3 px-3 text-center">
-                                    <input type="checkbox" name="selected_ids" value="{{ acc.id }}" class="account-checkbox rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer">
+                                    <input type="checkbox" name="account_ids" value="{{ acc.id }}" class="account-checkbox rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer">
                                 </td>
                                 <td class="py-3 px-3 font-mono text-xs text-slate-500">#{{ acc.id }}</td>
-                                <td class="py-3 px-3 font-medium text-white">
-                                    <span class="inline-block px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-xs border border-slate-700">
-                                        {{ acc.product.name if acc.product else 'Товар #' ~ acc.product_id }}
+                                <td class="py-3 px-3 font-mono font-bold text-indigo-400">
+                                    <span class="px-2 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/50">
+                                        {{ acc.state }}
                                     </span>
                                 </td>
                                 <td class="py-3 px-3 font-semibold text-slate-100">
                                     {{ acc.name }}
                                 </td>
-                                <td class="py-3 px-3 font-mono text-xs text-slate-400">
+                                <td class="py-3 px-3 font-mono text-xs text-slate-300">
                                     {{ acc.date_info }}
+                                </td>
+                                <td class="py-3 px-3 text-xs">
+                                    {% if age >= 30 %}
+                                    <span class="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+                                        {{ age }} дн. (30+)
+                                    </span>
+                                    {% elif age >= 15 %}
+                                    <span class="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">
+                                        {{ age }} дн. (15+)
+                                    </span>
+                                    {% elif age >= 7 %}
+                                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                                        {{ age }} дн. (7+)
+                                    </span>
+                                    {% else %}
+                                    <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                                        {{ age }} дн. (&lt;7)
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-3 font-medium text-white">
+                                    <span class="inline-block px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-xs border border-slate-700">
+                                        {{ acc.product.name if acc.product else 'Товар #' ~ acc.product_id }}
+                                    </span>
                                 </td>
                                 <td class="py-3 px-3 text-xs">
                                     {% if acc.is_sold %}
@@ -193,8 +235,8 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="9" class="py-8 text-center text-slate-500 text-sm">
-                                    Аккаунтов не найдено. Воспользуйтесь кнопками выше для загрузки.
+                                <td colspan="11" class="py-8 text-center text-slate-500 text-sm">
+                                    Аккаунтов не найдено. Воспользуйтесь кнопками выше для загрузки архива.
                                 </td>
                             </tr>
                         {% endif %}
@@ -208,12 +250,12 @@
                 <span>Страница <b>{{ page }}</b> из <b>{{ total_pages }}</b> (Всего: {{ total_matching }})</span>
                 <div class="flex items-center space-x-1.5">
                     {% if page > 1 %}
-                    <a href="/accounts?page={{ page - 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&status_filter={{ status_filter }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
+                    <a href="/accounts?page={{ page - 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&age_filter={{ age_filter }}&status_filter={{ status_filter }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
                         &larr; Назад
                     </a>
                     {% endif %}
                     {% if page < total_pages %}
-                    <a href="/accounts?page={{ page + 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&status_filter={{ status_filter }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
+                    <a href="/accounts?page={{ page + 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&age_filter={{ age_filter }}&status_filter={{ status_filter }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
                         Вперед &rarr;
                     </a>
                     {% endif %}
@@ -232,22 +274,27 @@
         </button>
         <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-1">
             <i class="fa-solid fa-file-zipper text-indigo-400"></i>
-            <span>Пакетная загрузка через ZIP / RAR</span>
+            <span>Загрузка архива ZIP / RAR в Категорию</span>
         </h3>
-        <p class="text-xs text-slate-400 mb-4">Архив (.zip или .rar) с .txt файлами. Дата автоматически приводится к <code>NAME SURNAME, DD.MM</code> (хвост после месяца строго отсекается).</p>
+        <p class="text-xs text-slate-400 mb-4">
+            Формат строк: <code>ST | NAME SURNAME | DD.MM</code> (ST — штат США).<br>
+            Сервер сам рассчитает возраст в днях и разложит аккаунты по категориям-тирам: <b>7+, 15+, 30+ дней</b>.
+            На 15-й день аккаунты автоматически взрослеют и переходят в 15+!
+        </p>
 
         <form method="POST" action="/accounts/upload-archive" enctype="multipart/form-data" class="space-y-4">
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Целевой товар *</label>
-                <select name="product_id" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="" selected>⚡️ Авто-определение товара по именам файлов в архиве</option>
-                    {% for p in products %}
-                    <option value="{{ p.id }}">
-                        {{ p.subcategory.category.name if p.subcategory and p.subcategory.category else '' }} &rarr; {{ p.subcategory.name if p.subcategory else '' }} &rarr; {{ p.name }} (${{ "%.2f"|format(p.price) }})
-                    </option>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Куда загрузить (Категория / Подкатегория) *</label>
+                <select name="subcategory_id" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    {% for cat in categories %}
+                        {% for sub in cat.subcategories %}
+                        <option value="{{ sub.id }}">
+                            📁 {{ cat.name }} &rarr; {{ sub.name }} (Авто-сортировка 7, 15, 30+ дней)
+                        </option>
+                        {% endfor %}
                     {% endfor %}
                 </select>
-                <p class="text-[11px] text-slate-500 mt-1">Выберите конкретный товар или оставьте авто-определение, чтобы сервер сам отсортировал аккаунты по файлам архива.</p>
+                <p class="text-[11px] text-slate-500 mt-1">Аккаунты будут автоматически распределены по тирам отлёжки (7-14 дн., 15-29 дн., 30+ дн.).</p>
             </div>
 
             <div>
@@ -261,7 +308,7 @@
                     Отмена
                 </button>
                 <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
-                    Распаковать и добавить
+                    Распаковать и отсортировать
                 </button>
             </div>
         </form>
@@ -278,9 +325,9 @@
             <i class="fa-solid fa-trash-can text-rose-400"></i>
             <span>Удаление по списку</span>
         </h3>
-        <p class="text-xs text-slate-400 mb-4">Вставьте список аккаунтов (по одному на строку). Будут удалены только еще не проданные аккаунты, совпадающие со списком.</p>
+        <p class="text-xs text-slate-400 mb-4">Вставьте список аккаунтов (по одному на строку в формате <code>ST | NAME SURNAME | DD.MM</code> или <code>NAME SURNAME, DD.MM</code>). Будут удалены только еще не проданные аккаунты.</p>
 
-        <form method="POST" action="/accounts/delete-by-list" class="space-y-4">
+        <form method="POST" action="/accounts/delete-list" class="space-y-4">
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Фильтр по товару (необязательно)</label>
                 <select name="product_id" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-rose-500">
@@ -293,7 +340,7 @@
 
             <div>
                 <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Список для удаления *</label>
-                <textarea name="delete_text" rows="8" required placeholder="IVAN PETROV, 15.08&#10;ALEX SMITH, 22.11"
+                <textarea name="list_data" rows="8" required placeholder="CA | JOHN DOE | 15.04&#10;NY | MICHAEL SMITH | 22.11"
                     class="w-full p-3 font-mono text-xs rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500"></textarea>
             </div>
 
@@ -310,7 +357,8 @@
 </div>
 
 <!-- Hidden Single Delete Form -->
-<form id="single-delete-form" method="POST" action="" class="hidden">
+<form id="single-delete-form" method="POST" action="/accounts/delete-single" class="hidden">
+    <input type="hidden" id="single-delete-id" name="account_id" value="">
     {% if selected_product_id %}
     <input type="hidden" name="product_id" value="{{ selected_product_id }}">
     {% endif %}
@@ -319,50 +367,43 @@
 
 {% block scripts %}
 <script>
-    function openModal(id) {
-        document.getElementById(id).classList.remove('hidden');
-    }
-
-    function closeModal(id) {
-        document.getElementById(id).classList.add('hidden');
-    }
-
     function deleteSingleAccount(id) {
-        if (confirm('Вы уверены, что хотите удалить этот аккаунт?')) {
-            const form = document.getElementById('single-delete-form');
-            form.action = '/accounts/' + id + '/delete';
-            form.submit();
+        if (confirm('Удалить аккаунт #' + id + '?')) {
+            document.getElementById('single-delete-id').value = id;
+            document.getElementById('single-delete-form').submit();
         }
     }
 
-    // Bulk selection handler
-    const selectAll = document.getElementById('select-all');
-    const checkboxes = document.querySelectorAll('.account-checkbox');
-    const bulkBar = document.getElementById('bulk-actions');
-    const selectedCount = document.getElementById('selected-count');
+    // Checkbox multi-select logic
+    const selectAllCheckbox = document.getElementById('select-all');
+    const accountCheckboxes = document.querySelectorAll('.account-checkbox');
+    const bulkActionsBar = document.getElementById('bulk-actions');
+    const selectedCountSpan = document.getElementById('selected-count');
 
     function updateBulkBar() {
-        const checked = document.querySelectorAll('.account-checkbox:checked');
-        if (checked.length > 0) {
-            bulkBar.classList.remove('hidden');
-            selectedCount.textContent = checked.length;
+        let checkedCount = 0;
+        accountCheckboxes.forEach(cb => {
+            if (cb.checked) checkedCount++;
+        });
+        if (checkedCount > 0) {
+            bulkActionsBar.classList.remove('hidden');
+            selectedCountSpan.textContent = checkedCount;
         } else {
-            bulkBar.classList.add('hidden');
+            bulkActionsBar.classList.add('hidden');
         }
     }
 
-    if (selectAll) {
-        selectAll.addEventListener('change', () => {
-            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            accountCheckboxes.forEach(cb => {
+                cb.checked = selectAllCheckbox.checked;
+            });
             updateBulkBar();
         });
     }
 
-    checkboxes.forEach(cb => {
-        cb.addEventListener('change', () => {
-            updateBulkBar();
-            if (!cb.checked && selectAll) selectAll.checked = false;
-        });
+    accountCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateBulkBar);
     });
 </script>
 {% endblock %}

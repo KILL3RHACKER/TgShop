@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.database.models import Category, Subcategory, Product, Account
 from web.auth import AdminUser
 from web.dependencies import get_db
+from web.services import get_or_create_age_tier_products
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -178,6 +179,16 @@ async def delete_subcategory(
     msg = quote(f"Подкатегория «{name}» и её товары удалены")
     return RedirectResponse(url=f"/products?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
 
+@router.post("/subcategories/{subcategory_id}/create-age-tiers")
+async def create_standard_age_tiers_for_subcategory(
+    subcategory_id: int,
+    admin: AdminUser,
+    session: AsyncSession = Depends(get_db),
+):
+    products = await get_or_create_age_tier_products(session, subcategory_id)
+    msg = quote("Стандартные товары по отлёжке (7+, 15+, 30+ дней) успешно созданы!")
+    return RedirectResponse(url=f"/products?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
+
 # --- Product (Товар) Handlers ---
 @router.post("/create")
 async def create_product(
@@ -186,6 +197,8 @@ async def create_product(
     name: str = Form(...),
     price: float = Form(...),
     description: str = Form(""),
+    min_days: int | None = Form(None),
+    max_days: int | None = Form(None),
     session: AsyncSession = Depends(get_db),
 ):
     clean_name = name.strip()
@@ -198,6 +211,8 @@ async def create_product(
         name=clean_name,
         price=price,
         description=description.strip(),
+        min_days=min_days,
+        max_days=max_days,
     )
     session.add(product)
     await session.commit()
@@ -213,6 +228,8 @@ async def edit_product(
     name: str = Form(...),
     price: float = Form(...),
     description: str = Form(""),
+    min_days: int | None = Form(None),
+    max_days: int | None = Form(None),
     session: AsyncSession = Depends(get_db),
 ):
     product = await session.get(Product, product_id)
@@ -224,6 +241,8 @@ async def edit_product(
     product.name = name.strip()
     product.price = price
     product.description = description.strip()
+    product.min_days = min_days
+    product.max_days = max_days
 
     await session.commit()
     msg = quote(f"Товар «{product.name}» успешно обновлен")

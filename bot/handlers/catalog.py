@@ -203,11 +203,14 @@ async def show_account_card(
     product = await session.get(Product, account.product_id)
     created_str = account.created_at.strftime("%d.%m.%Y %H:%M") if account.created_at else "—"
 
+    age_str = f"{account.age_days} дн." if account.registration_date else "—"
     text = (
-        f"👤 <b>Аккаунт:</b> <code>{account.data}</code>\n"
-        f"🏷 <b>Товар:</b> {product.name}\n"
+        f"🏷 <b>Товар:</b> <code>{account.data}</code>\n"
+        f"🏛 <b>Штат (ST):</b> <code>{account.state}</code>\n"
+        f"👤 <b>ФИО:</b> <code>{account.name}</code>\n"
+        f"📅 <b>Дата:</b> <code>{account.date_info}</code> (Отлёжка: {age_str})\n"
+        f"📁 <b>Категория:</b> {product.name}\n"
         f"💵 <b>Цена:</b> ${product.price:.2f}\n"
-        f"📅 <b>Добавлен на витрину:</b> {created_str}\n"
         f"📊 <b>Статус:</b> {'🟢 В наличии' if not account.is_sold else '🔴 Продан'}"
     )
 

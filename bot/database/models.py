@@ -1,6 +1,6 @@
 import enum
-from datetime import datetime
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from datetime import datetime, date
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -70,6 +70,8 @@ class Product(Base):
     name: Mapped[str] = mapped_column(String(128), index=True)
     description: Mapped[str] = mapped_column(Text, default="")
     price: Mapped[float] = mapped_column(Numeric(12, 2), default=1.0)
+    min_days: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    max_days: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
     subcategory: Mapped["Subcategory"] = relationship(back_populates="products", lazy="selectin")
     accounts: Mapped[list["Account"]] = relationship(
@@ -87,9 +89,11 @@ class Account(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
-    data: Mapped[str] = mapped_column(Text)  # Format: "NAME SURNAME, DD.MM"
+    state: Mapped[str] = mapped_column(String(16), default="US", index=True)  # Format: "CA", "NY"
+    data: Mapped[str] = mapped_column(Text)  # Format: "ST | NAME SURNAME | DD.MM"
     name: Mapped[str] = mapped_column(String(128), index=True)  # Format: "NAME SURNAME"
     date_info: Mapped[str] = mapped_column(String(32), index=True)  # Format: "DD.MM"
+    registration_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     raw_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     is_sold: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
@@ -98,6 +102,12 @@ class Account(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
     product: Mapped["Product"] = relationship(back_populates="accounts", lazy="selectin")
+
+    @property
+    def age_days(self) -> int:
+        if not self.registration_date:
+            return 0
+        return max(0, (date.today() - self.registration_date).days)
 
     @property
     def subcategory(self) -> Subcategory | None:

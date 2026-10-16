@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from bot.database.models import Category, Subcategory, Product, Account
@@ -7,46 +8,105 @@ async def seed_data(session: AsyncSession) -> None:
     if result.scalars().first():
         return
 
-    cat1 = Category(name="VPN & Proxy")
-    cat2 = Category(name="Подписки & Сервисы")
-    session.add_all([cat1, cat2])
+    cat1 = Category(name="Аккаунты USA")
+    session.add(cat1)
     await session.flush()
 
-    subcat1 = Subcategory(category_id=cat1.id, name="VLESS Reality")
-    subcat2 = Subcategory(category_id=cat1.id, name="Wireguard")
-    subcat3 = Subcategory(category_id=cat2.id, name="Telegram")
-    session.add_all([subcat1, subcat2, subcat3])
+    subcat1 = Subcategory(category_id=cat1.id, name="Общая база США")
+    session.add(subcat1)
     await session.flush()
 
-    prod1 = Product(
+    today = date.today()
+
+    prod_7 = Product(
         subcategory_id=subcat1.id,
-        name="VLESS Reality (USA) 1 мес",
-        description="Высокоскоростной конфиг VLESS Reality с локацией США на 1 месяц.",
-        price=3.50,
+        name="Отлёжка 7+ Дней (7-14 дн.)",
+        description="Отлёжка от 7 до 14 полных дней. Прогретые аккаунты.",
+        price=5.00,
+        min_days=7,
+        max_days=14,
     )
-    prod2 = Product(
-        subcategory_id=subcat2.id,
-        name="Wireguard (Германия) 1 мес",
-        description="Конфигурация Wireguard с европейской локацией.",
-        price=2.99,
+    prod_15 = Product(
+        subcategory_id=subcat1.id,
+        name="Отлёжка 15+ Дней (15-29 дн.)",
+        description="Отлёжка от 15 до 29 полных дней. Высокий траст.",
+        price=10.00,
+        min_days=15,
+        max_days=29,
     )
-    prod3 = Product(
-        subcategory_id=subcat3.id,
-        name="Telegram Premium 1 мес",
-        description="Активация подписки Telegram Premium на 1 месяц.",
-        price=4.99,
+    prod_30 = Product(
+        subcategory_id=subcat1.id,
+        name="Отлёжка 30+ Дней (30+ дн.)",
+        description="Отлёжка от 30 дней и старше. Максимальная отлёжка.",
+        price=15.00,
+        min_days=30,
+        max_days=None,
     )
-    session.add_all([prod1, prod2, prod3])
+    session.add_all([prod_7, prod_15, prod_30])
     await session.flush()
+
+    date_10d = today - timedelta(days=10)
+    date_14d = today - timedelta(days=14)
+    date_15d = today - timedelta(days=15)
+    date_20d = today - timedelta(days=20)
+    date_35d = today - timedelta(days=35)
+    date_60d = today - timedelta(days=60)
 
     sample_accounts = [
-        Account(product_id=prod1.id, data="IVAN IVANOV, 15.04", name="IVAN IVANOV", date_info="15.04"),
-        Account(product_id=prod1.id, data="JOHN DOE, 12.03", name="JOHN DOE", date_info="12.03"),
-        Account(product_id=prod1.id, data="ALICE SMITH, 22.11", name="ALICE SMITH", date_info="22.11"),
-        Account(product_id=prod2.id, data="MICHAEL BROWN, 04.05", name="MICHAEL BROWN", date_info="04.05"),
-        Account(product_id=prod2.id, data="DAVID WILSON, 12.08", name="DAVID WILSON", date_info="12.08"),
-        Account(product_id=prod3.id, data="EMMA JOHNSON, 30.09", name="EMMA JOHNSON", date_info="30.09"),
-        Account(product_id=prod3.id, data="OLIVIA DAVIS, 19.07", name="OLIVIA DAVIS", date_info="19.07"),
+        Account(
+            product_id=prod_7.id,
+            state="CA",
+            name="JOHN DOE",
+            date_info=date_10d.strftime("%d.%m"),
+            registration_date=date_10d,
+            data=f"CA | JOHN DOE | {date_10d.strftime('%d.%m')}",
+            raw_data=f"CA | JOHN DOE | {date_10d.strftime('%d.%m')}",
+        ),
+        Account(
+            product_id=prod_7.id,
+            state="NY",
+            name="MICHAEL SMITH",
+            date_info=date_14d.strftime("%d.%m"),
+            registration_date=date_14d,
+            data=f"NY | MICHAEL SMITH | {date_14d.strftime('%d.%m')}",
+            raw_data=f"NY | MICHAEL SMITH | {date_14d.strftime('%d.%m')}",
+        ),
+        Account(
+            product_id=prod_15.id,
+            state="TX",
+            name="DAVID JOHNSON",
+            date_info=date_15d.strftime("%d.%m"),
+            registration_date=date_15d,
+            data=f"TX | DAVID JOHNSON | {date_15d.strftime('%d.%m')}",
+            raw_data=f"TX | DAVID JOHNSON | {date_15d.strftime('%d.%m')}",
+        ),
+        Account(
+            product_id=prod_15.id,
+            state="FL",
+            name="EMILY DAVIS",
+            date_info=date_20d.strftime("%d.%m"),
+            registration_date=date_20d,
+            data=f"FL | EMILY DAVIS | {date_20d.strftime('%d.%m')}",
+            raw_data=f"FL | EMILY DAVIS | {date_20d.strftime('%d.%m')}",
+        ),
+        Account(
+            product_id=prod_30.id,
+            state="IL",
+            name="ROBERT BROWN",
+            date_info=date_35d.strftime("%d.%m"),
+            registration_date=date_35d,
+            data=f"IL | ROBERT BROWN | {date_35d.strftime('%d.%m')}",
+            raw_data=f"IL | ROBERT BROWN | {date_35d.strftime('%d.%m')}",
+        ),
+        Account(
+            product_id=prod_30.id,
+            state="OH",
+            name="SARAH WILSON",
+            date_info=date_60d.strftime("%d.%m"),
+            registration_date=date_60d,
+            data=f"OH | SARAH WILSON | {date_60d.strftime('%d.%m')}",
+            raw_data=f"OH | SARAH WILSON | {date_60d.strftime('%d.%m')}",
+        ),
     ]
     session.add_all(sample_accounts)
     await session.commit()
