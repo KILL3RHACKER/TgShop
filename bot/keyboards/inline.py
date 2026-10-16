@@ -162,7 +162,6 @@ def get_account_card_kb(account: Account, product: Product, page: int = 1) -> In
 def get_profile_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="📥 Пополнить баланс", callback_data="topup")
-    builder.button(text="📦 Мои заказы / Диспуты", callback_data="my_orders")
     builder.button(text="◀️ Главное меню", callback_data="main_menu")
     builder.adjust(1)
     return builder.as_markup()

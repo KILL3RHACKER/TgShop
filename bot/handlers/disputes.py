@@ -705,11 +705,9 @@ async def show_my_chats(callback: CallbackQuery, session: AsyncSession):
     if not chats_orders:
         text = (
             "💬 <b>Ваши чаты по заказам</b>\n\n"
-            "У вас пока нет активных обращений, вопросов или диспутов.\n"
-            "Вы можете открыть диспут или задать вопрос по любому заказу из раздела 📦 <b>Мои заказы</b>."
+            "У вас пока нет активных обращений, вопросов или диспутов."
         )
         builder = InlineKeyboardBuilder()
-        builder.button(text="📦 Мои заказы", callback_data="my_orders")
         builder.button(text="◀️ Главное меню", callback_data="main_menu")
         builder.adjust(1)
         try:
