@@ -240,3 +240,70 @@ async def test_7day_sold_accounts_retention():
         assert order_db.account_id is None or res_old is None
 
     await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_category_upload_auto_type_creation_no_under7():
+    """Проверка загрузки по категории: автосоздание {bank} | N Days и полное отсутствие <7D"""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with async_session() as session:
+        cat = Category(name="Truist")
+        session.add(cat)
+        await session.commit()
+        await session.refresh(cat)
+
+        today = date.today()
+        # 3 тестовых аккаунта: 10 дней, 20 дней, 50 дней
+        accs_data = [
+            {
+                "state": "CA",
+                "name": "ACC SEVEN",
+                "date_info": "01.10",
+                "registration_date": today - timedelta(days=10),
+                "data": "CA | ACC SEVEN | 01.10",
+                "raw_data": "raw log 1",
+            },
+            {
+                "state": "NY",
+                "name": "ACC FIFTEEN",
+                "date_info": "20.09",
+                "registration_date": today - timedelta(days=20),
+                "data": "NY | ACC FIFTEEN | 20.09",
+                "raw_data": "raw log 2",
+            },
+            {
+                "state": "TX",
+                "name": "ACC THIRTY",
+                "date_info": "15.08",
+                "registration_date": today - timedelta(days=50),
+                "data": "TX | ACC THIRTY | 15.08",
+                "raw_data": "raw log 3",
+            },
+        ]
+
+        stats = await add_accounts_to_category_auto_age(session, cat.id, accs_data)
+        assert stats.get("Truist | 7 Days") == 1
+        assert stats.get("Truist | 15 Days") == 1
+        assert stats.get("Truist | 30+ Days") == 1
+
+        # Проверяем созданные подкатегории (types)
+        sub_res = await session.execute(
+            select(Subcategory).where(Subcategory.category_id == cat.id).order_by(Subcategory.name)
+        )
+        subcats = list(sub_res.scalars().all())
+        subcat_names = [s.name for s in subcats]
+
+        assert "Truist | 7 Days" in subcat_names
+        assert "Truist | 15 Days" in subcat_names
+        assert "Truist | 30+ Days" in subcat_names
+        # Строго проверяем, что <7D или <7 Days отсутствуют!
+        for name in subcat_names:
+            assert "<7" not in name
+            assert "до 7" not in name.lower()
+
+    await engine.dispose()
+

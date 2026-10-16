@@ -78,15 +78,34 @@ async def show_subcategories(
     result = await session.execute(
         select(Subcategory)
         .where(Subcategory.category_id == callback_data.id)
-        .order_by(Subcategory.name)
     )
-    subcategories = list(result.scalars().all())
+    raw_subcategories = list(result.scalars().all())
+    # Исключаем устаревшие категории <7D / <7 Days
+    subcategories = [s for s in raw_subcategories if not re.search(r'<7|до 7', s.name, re.IGNORECASE)]
 
     if not subcategories:
         await callback.answer("В этой категории пока нет подкатегорий.", show_alert=True)
         return
 
+    def subcat_sort_key(s: Subcategory) -> int:
+        name = s.name.lower()
+        if "7 day" in name or "7 д" in name:
+            return 1
+        if "15 day" in name or "15 д" in name:
+            return 2
+        if "30" in name:
+            return 3
+        return 10
+
+    subcategories.sort(key=subcat_sort_key)
+
     subcat_ids = [s.id for s in subcategories]
+    prods_res = await session.execute(
+        select(Product.subcategory_id, Product.price)
+        .where(Product.subcategory_id.in_(subcat_ids))
+    )
+    prices = {row[0]: float(row[1]) for row in prods_res.all()}
+
     counts_res = await session.execute(
         select(Product.subcategory_id, func.count(Account.id))
         .join(Account, Account.product_id == Product.id)
@@ -97,7 +116,7 @@ async def show_subcategories(
 
     await callback.message.edit_text(
         f"📁 <b>{category.name}</b>\n\nВыберите подкатегорию:",
-        reply_markup=get_subcategories_kb(subcategories, callback_data.id, counts)
+        reply_markup=get_subcategories_kb(subcategories, callback_data.id, counts, prices)
     )
 
 @catalog_router.callback_query(SubcategoryCD.filter())

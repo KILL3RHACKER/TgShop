@@ -96,7 +96,6 @@
             <div>
                 <select name="age_filter" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="all" {% if age_filter == 'all' %}selected{% endif %}>Любая отлёжка</option>
-                    <option value="fresh" {% if age_filter == 'fresh' %}selected{% endif %}>Свежие (до 7 дн.)</option>
                     <option value="7" {% if age_filter == '7' %}selected{% endif %}>Отлёжка 7+ (7-14 дн.)</option>
                     <option value="15" {% if age_filter == '15' %}selected{% endif %}>Отлёжка 15+ (15-29 дн.)</option>
                     <option value="30" {% if age_filter == '30' %}selected{% endif %}>Отлёжка 30+ (30+ дн.)</option>

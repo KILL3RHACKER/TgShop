@@ -54,32 +54,25 @@ STATE_NAMES_MAP = {
 
 DEFAULT_AGE_TIERS = [
     {
-        "name": "7d",
+        "name": "7 Days",
         "min_days": 7,
         "max_days": 14,
         "price": 10.0,
         "description": "Отлёжка 7-14 полных дней."
     },
     {
-        "name": "15d",
+        "name": "15 Days",
         "min_days": 15,
         "max_days": 29,
         "price": 15.0,
         "description": "Отлёжка 15-29 полных дней."
     },
     {
-        "name": "30d",
+        "name": "30+ Days",
         "min_days": 30,
         "max_days": None,
         "price": 20.0,
         "description": "Отлёжка от 30 дней и старше."
-    },
-    {
-        "name": "<7d",
-        "min_days": 0,
-        "max_days": 6,
-        "price": 5.0,
-        "description": "Свежая регистрация до 7 дней."
     },
 ]
 
@@ -928,62 +921,88 @@ async def get_or_create_age_tier_products_for_category(
 ) -> list[Product]:
     """
     Получает все товары в категории (по всем подкатегориям).
-    Если товаров нет, создает линейку подкатегорий (Truist 7d, Truist 15d, Truist 30d) и товары внутри них.
+    Автоматически создает или дополняет линейку подкатегорий (type) строго в формате:
+    {bank} | 7 Days
+    {bank} | 15 Days
+    {bank} | 30+ Days
+    и товары внутри них.
     """
     cat = await session.get(Category, category_id)
     cat_name = cat.name.strip() if cat else "Банк"
 
     prods_res = await session.execute(
         select(Product)
+        .options(selectinload(Product.subcategory))
         .join(Subcategory, Product.subcategory_id == Subcategory.id)
         .where(Subcategory.category_id == category_id)
-        .order_by(Product.min_days.asc().nullslast(), Product.id.asc())
     )
-    products = list(prods_res.scalars().all())
+    existing_products = list(prods_res.scalars().all())
 
-    # Если уже есть товары с заданными min_days
-    has_tier = any(p.min_days is not None for p in products)
-    if has_tier:
-        return products
-
-    if products:
-        return products
-
-    # Создаем подкатегории и товары для каждого тира
-    created = []
-    for tier in DEFAULT_AGE_TIERS:
-        subcat_title = f"{cat_name} {tier['name']}"
-        sub_res = await session.execute(
-            select(Subcategory).where(
-                Subcategory.category_id == category_id,
-                Subcategory.name == subcat_title
-            ).limit(1)
-        )
-        subcat = sub_res.scalar_one_or_none()
-        if not subcat:
-            subcat = Subcategory(
-                category_id=category_id,
-                name=subcat_title,
+    # Удаляем устаревшие тиры <7D / <7 Days, если они существовали
+    legacy_subs = await session.execute(
+        select(Subcategory).where(
+            Subcategory.category_id == category_id,
+            or_(
+                Subcategory.name.ilike("%<7%"),
+                Subcategory.name.ilike("%свеж%"),
+                Subcategory.name.ilike("%до 7%")
             )
-            session.add(subcat)
-            await session.commit()
-            await session.refresh(subcat)
-
-        p = Product(
-            subcategory_id=subcat.id,
-            name=subcat_title,
-            description=tier["description"],
-            price=tier["price"],
-            min_days=tier["min_days"],
-            max_days=tier["max_days"],
         )
-        session.add(p)
-        created.append(p)
+    )
+    for lsub in legacy_subs.scalars().all():
+        await session.delete(lsub)
+
+    tier_map: dict[str, Product] = {}
+    for p in existing_products:
+        if p.min_days == 0 or (p.name and "<7" in p.name):
+            continue
+        for tier in DEFAULT_AGE_TIERS:
+            # Match by min_days
+            if p.min_days == tier["min_days"]:
+                expected_title = f"{cat_name} | {tier['name']}"
+                if p.name != expected_title:
+                    p.name = expected_title
+                if p.subcategory and p.subcategory.name != expected_title:
+                    p.subcategory.name = expected_title
+                tier_map[tier["name"]] = p
+                break
+
+    # Создаем недостающие тиры
+    for tier in DEFAULT_AGE_TIERS:
+        if tier["name"] not in tier_map:
+            subcat_title = f"{cat_name} | {tier['name']}"
+            sub_res = await session.execute(
+                select(Subcategory).where(
+                    Subcategory.category_id == category_id,
+                    Subcategory.name == subcat_title
+                ).limit(1)
+            )
+            subcat = sub_res.scalar_one_or_none()
+            if not subcat:
+                subcat = Subcategory(
+                    category_id=category_id,
+                    name=subcat_title,
+                )
+                session.add(subcat)
+                await session.flush()
+
+            p = Product(
+                subcategory_id=subcat.id,
+                name=subcat_title,
+                description=tier["description"],
+                price=tier["price"],
+                min_days=tier["min_days"],
+                max_days=tier["max_days"],
+            )
+            session.add(p)
+            await session.flush()
+            tier_map[tier["name"]] = p
 
     await session.commit()
-    for p in created:
-        await session.refresh(p)
-    return created
+
+    # Возвращаем товары строго в порядке тиров: 7 Days, 15 Days, 30+ Days
+    ordered_products = [tier_map[tier["name"]] for tier in DEFAULT_AGE_TIERS if tier["name"] in tier_map]
+    return ordered_products
 
 async def add_accounts_to_category_auto_age(
     session: AsyncSession,

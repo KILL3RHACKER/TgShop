@@ -54,13 +54,20 @@ def get_categories_kb(categories: list[Category]) -> InlineKeyboardMarkup:
 def get_subcategories_kb(
     subcategories: list[Subcategory],
     category_id: int,
-    counts: dict[int, int] | None = None
+    counts: dict[int, int] | None = None,
+    prices: dict[int, float] | None = None
 ) -> InlineKeyboardMarkup:
     counts = counts or {}
+    prices = prices or {}
     builder = InlineKeyboardBuilder()
     for subcat in subcategories:
         count = counts.get(subcat.id, 0)
-        stock_text = f"({count} тов.)" if count > 0 else ""
+        price = prices.get(subcat.id)
+        if count > 0:
+            price_str = f" — ${price:.2f}" if price is not None else ""
+            stock_text = f"({count} шт.){price_str}"
+        else:
+            stock_text = "(0 шт.)"
         builder.button(
             text=f"📂 {subcat.name} {stock_text}",
             callback_data=SubcategoryCD(id=subcat.id)

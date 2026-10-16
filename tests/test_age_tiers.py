@@ -97,31 +97,30 @@ class TestAgeTiers(unittest.TestCase):
         self.assertEqual(accs[0]["data"], "ID | JOHN DOE | 15.04")
 
     def test_match_product_by_age(self):
-        prod_fresh = Product(id=1, name="До 7", min_days=0, max_days=6, price=3.0)
-        prod_7 = Product(id=2, name="7+", min_days=7, max_days=14, price=5.0)
-        prod_15 = Product(id=3, name="15+", min_days=15, max_days=29, price=10.0)
-        prod_30 = Product(id=4, name="30+", min_days=30, max_days=None, price=15.0)
-        prods = [prod_fresh, prod_7, prod_15, prod_30]
+        prod_7 = Product(id=2, name="7 Days", min_days=7, max_days=14, price=10.0)
+        prod_15 = Product(id=3, name="15 Days", min_days=15, max_days=29, price=15.0)
+        prod_30 = Product(id=4, name="30+ Days", min_days=30, max_days=None, price=20.0)
+        prods = [prod_7, prod_15, prod_30]
 
-        # Day 3 -> fresh
-        self.assertEqual(match_product_by_age(prods, 3).id, 1)
+        # Day 3 -> fallback to first available tier (7 Days)
+        self.assertEqual(match_product_by_age(prods, 3).id, 2)
 
-        # Day 10 -> 7+
+        # Day 10 -> 7 Days
         self.assertEqual(match_product_by_age(prods, 10).id, 2)
 
-        # Day 14 -> 7+
+        # Day 14 -> 7 Days
         self.assertEqual(match_product_by_age(prods, 14).id, 2)
 
-        # Day 15 (next day!) -> 15+!
+        # Day 15 (next day!) -> 15 Days!
         self.assertEqual(match_product_by_age(prods, 15).id, 3)
 
-        # Day 29 -> 15+
+        # Day 29 -> 15 Days
         self.assertEqual(match_product_by_age(prods, 29).id, 3)
 
-        # Day 30 -> 30+!
+        # Day 30 -> 30+ Days!
         self.assertEqual(match_product_by_age(prods, 30).id, 4)
 
-        # Day 100 -> 30+
+        # Day 100 -> 30+ Days
         self.assertEqual(match_product_by_age(prods, 100).id, 4)
 
     def test_sync_accounts_graduation(self):
