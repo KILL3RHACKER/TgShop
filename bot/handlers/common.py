@@ -7,11 +7,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from bot.config import config
-from bot.database.models import User
+from bot.database.models import User, Order
 from bot.keyboards.inline import get_main_menu, get_rules_kb
 from bot.services.tron import generate_tron_wallet
 
 common_router = Router()
+
+async def check_user_unread_chats(session: AsyncSession, user_id: int) -> bool:
+    stmt = (
+        select(Order.id)
+        .where(
+            Order.user_id == user_id,
+            Order.user_unread == True
+        )
+        .limit(1)
+    )
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none() is not None
 
 SHOP_RULES_TEXT = (
     "📜 <b>ПРАВИЛА И РЕГЛАМЕНТ РАБОТЫ МАГАЗИНА</b>\n\n"
@@ -67,12 +79,13 @@ async def cmd_start(message: Message, command: CommandObject, session: AsyncSess
         return
 
     is_admin = (tg_id == config.admin_id)
+    has_unread = await check_user_unread_chats(session, tg_id)
     text = (
         f"👋 Здравствуйте, <b>{message.from_user.first_name}</b>!\n\n"
         "Добро пожаловать в наш автоматизированный магазин.\n"
         "Выберите раздел в меню ниже:"
     )
-    await message.answer(text, reply_markup=get_main_menu(is_admin))
+    await message.answer(text, reply_markup=get_main_menu(is_admin, has_unread))
 
 @common_router.callback_query(F.data == "accept_rules")
 async def accept_rules(callback: CallbackQuery, session: AsyncSession):
@@ -84,12 +97,13 @@ async def accept_rules(callback: CallbackQuery, session: AsyncSession):
         await session.commit()
 
     is_admin = (callback.from_user.id == config.admin_id)
+    has_unread = await check_user_unread_chats(session, callback.from_user.id)
     text = (
         f"👋 Здравствуйте, <b>{callback.from_user.first_name}</b>!\n\n"
         "Добро пожаловать в наш автоматизированный магазин.\n"
         "Выберите раздел в меню ниже:"
     )
-    await callback.message.edit_text(text, reply_markup=get_main_menu(is_admin))
+    await callback.message.edit_text(text, reply_markup=get_main_menu(is_admin, has_unread))
 
 @common_router.callback_query(F.data == "view_rules")
 async def view_rules_handler(callback: CallbackQuery):
@@ -107,7 +121,8 @@ async def back_to_main_menu(callback: CallbackQuery, session: AsyncSession):
         return
 
     is_admin = (callback.from_user.id == config.admin_id)
+    has_unread = await check_user_unread_chats(session, callback.from_user.id)
     await callback.message.edit_text(
         "Главное меню магазина:",
-        reply_markup=get_main_menu(is_admin)
+        reply_markup=get_main_menu(is_admin, has_unread)
     )

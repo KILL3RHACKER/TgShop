@@ -12,13 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.models import Account, Product, Subcategory, Category
 
-class ParsedAccount(TypedDict):
+class ParsedAccount(TypedDict, total=False):
     state: str
     name: str
     date_info: str
     data: str
     raw_data: str
     registration_date: date | None
+    cookie_data: str | None
 
 MONTH_NAMES = {
     "jan": 1, "янв": 1, "feb": 2, "фев": 2, "mar": 3, "мар": 3,
@@ -468,6 +469,47 @@ def extract_archive_recursively(root_dir: str, max_depth: int = 5) -> None:
                 except Exception:
                     pass
 
+def find_cookie_for_account_file(fpath: str) -> str | None:
+    """
+    Ищет companion cookie файл для аккаунта:
+    1. Другой файл в той же папке (с именем cookie*, *.json, *.cookie, netscape или единственный второй файл)
+    2. Файл с совпадающим префиксом имени (например: acc1_cookie.json)
+    """
+    dir_name = os.path.dirname(fpath)
+    base_no_ext = os.path.splitext(os.path.basename(fpath))[0].lower()
+
+    try:
+        entries = os.listdir(dir_name)
+    except Exception:
+        entries = []
+
+    candidates: list[str] = []
+    for fn in entries:
+        full_p = os.path.join(dir_name, fn)
+        if not os.path.isfile(full_p) or full_p == fpath:
+            continue
+        fn_l = fn.lower()
+        if "cookie" in fn_l or fn_l.endswith((".json", ".cookie", ".netscape")):
+            candidates.insert(0, full_p)
+        elif fn_l.endswith((".txt", ".log")) and base_no_ext in fn_l:
+            candidates.append(full_p)
+        elif len(entries) <= 4 and fn_l.endswith((".txt", ".json", ".log", ".csv")):
+            candidates.append(full_p)
+
+    for cand in candidates:
+        try:
+            with open(cand, "rb") as cf:
+                cdata = cf.read()
+            if cdata and len(cdata) > 2:
+                for enc in ("utf-8", "utf-8-sig", "cp1251", "latin-1"):
+                    try:
+                        return cdata.decode(enc)
+                    except UnicodeDecodeError:
+                        continue
+        except Exception:
+            continue
+    return None
+
 def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount], int]:
     results: list[ParsedAccount] = []
     seen = set()
@@ -512,6 +554,8 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
         name_matches = re.findall(r'(?:Full\s*Name|Name|Client|Owner|Holder|Customer)[:\s]+[A-Za-zА-Яа-я]', text, re.IGNORECASE)
         has_multiple_customers = len(name_matches) > 1
 
+        companion_cookie = find_cookie_for_account_file(fpath)
+
         sep_pattern = re.compile(r'\n\s*={5,}\s*\n|\n\s*-{5,}\s*\n|\n\s*_{5,}\s*\n')
         if sep_pattern.search(text) and has_multiple_customers:
             blocks = [b.strip() for b in sep_pattern.split(text) if b.strip()]
@@ -519,6 +563,8 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
                 # В дампах с несколькими аккаунтами каждый блок обязан иметь реальное имя клиента
                 acc = parse_account_from_log_block(block, allow_fallback_name=False)
                 if acc:
+                    if companion_cookie and not acc.get("cookie_data"):
+                        acc["cookie_data"] = companion_cookie
                     key = acc["data"].upper()
                     if key not in seen:
                         seen.add(key)
@@ -529,6 +575,8 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
         if re.search(r'(?:Full\s*Name|Name|Client|Owner|Holder)[:\s]+[A-Za-zА-Яа-я]', text, re.IGNORECASE):
             acc = parse_account_from_log_block(text, fallback_name=folder_name or fn_base, allow_fallback_name=True)
             if acc:
+                if companion_cookie and not acc.get("cookie_data"):
+                    acc["cookie_data"] = companion_cookie
                 key = acc["data"].upper()
                 if key not in seen:
                     seen.add(key)
@@ -539,6 +587,8 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
         if fn_base == "info.txt":
             acc = parse_account_from_info_txt(text, context_name=folder_name)
             if acc:
+                if companion_cookie and not acc.get("cookie_data"):
+                    acc["cookie_data"] = companion_cookie
                 key = acc["data"].upper()
                 if key not in seen:
                     seen.add(key)
@@ -556,6 +606,8 @@ def parse_accounts_from_extracted_dir(root_dir: str) -> tuple[list[ParsedAccount
                 continue
             parsed = parse_account_line(line_str)
             if parsed:
+                if companion_cookie and not parsed.get("cookie_data"):
+                    parsed["cookie_data"] = companion_cookie
                 key = parsed["data"].upper()
                 if key not in seen:
                     seen.add(key)
@@ -812,6 +864,7 @@ async def add_accounts_bulk(
             registration_date=acc.get("registration_date"),
             data=acc["data"],
             raw_data=acc.get("raw_data"),
+            cookie_data=acc.get("cookie_data"),
             is_sold=False,
         )
         for acc in accounts_data
@@ -860,6 +913,7 @@ async def add_accounts_auto_age_tiers(
                     registration_date=acc.get("registration_date"),
                     data=acc["data"],
                     raw_data=acc.get("raw_data"),
+                    cookie_data=acc.get("cookie_data"),
                     is_sold=False,
                 )
             )
@@ -970,6 +1024,7 @@ async def add_accounts_to_category_auto_age(
                     registration_date=acc.get("registration_date"),
                     data=acc["data"],
                     raw_data=acc.get("raw_data"),
+                    cookie_data=acc.get("cookie_data"),
                     is_sold=False,
                 )
             )

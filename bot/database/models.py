@@ -101,6 +101,7 @@ class Account(Base):
     date_info: Mapped[str] = mapped_column(String(32), index=True)  # Format: "DD.MM"
     registration_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     raw_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cookie_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     is_sold: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     sold_to_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.tg_id"), nullable=True)
@@ -143,6 +144,9 @@ class Order(Base):
     last_reply_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     dispute_deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     has_dispute: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    account_data: Mapped[str | None] = mapped_column(Text, nullable=True)  # Снимок данных аккаунта (хранится даже после удаления аккаунта через 7 дней)
+    user_unread: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    admin_unread: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     user: Mapped["User"] = relationship(lazy="selectin")
     account: Mapped["Account | None"] = relationship(lazy="selectin")
@@ -182,10 +186,10 @@ class Order(Base):
     @property
     def order_code(self) -> str:
         """
-        Формат ID заказа: #ORD-{id}-{product_code}
-        Например: #ORD-1-TRU7D
+        ID заказа — это зашифрованное название товара с уникальным шестнадцатеричным номером.
+        Например: #TRU7D-0001, #CHA15D-0042
         """
-        return f"#ORD-{self.id}-{self.product_code}"
+        return f"#{self.product_code}-{self.id:04X}"
 
     messages: Mapped[list["DisputeMessage"]] = relationship(
         back_populates="order",

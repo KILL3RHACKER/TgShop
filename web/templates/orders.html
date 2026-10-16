@@ -248,9 +248,9 @@
                 <div class="p-3 rounded-xl {% if msg.sender_role == 'admin' %}bg-indigo-950/40 border border-indigo-900/60 ml-8{% else %}bg-slate-950/70 border border-slate-800 mr-8{% endif %}">
                     <div class="flex items-center justify-between text-xs mb-1">
                         <span class="font-semibold {% if msg.sender_role == 'admin' %}text-indigo-400{% else %}text-slate-300{% endif %}">
-                            {% if msg.sender_role == 'admin' %}👨‍💼 Администратор магазина{% else %}👤 Покупатель (@{{ o.user.username if o.user and o.user.username else o.user_id }}){% endif %}
+                            {% if msg.sender_role == 'admin' %}Admin({{ msg.created_at.strftime('%d.%m.%Y %H.%M') if msg.created_at else '' }}){% else %}Client({{ msg.created_at.strftime('%d.%m.%Y %H.%M') if msg.created_at else '' }}){% endif %}
                         </span>
-                        <span class="text-slate-500 text-[11px]">{{ msg.created_at | dt }}</span>
+                        <span class="text-slate-500 text-[11px]">{{ msg.created_at.strftime('%H:%M:%S') if msg.created_at else '' }}</span>
                     </div>
                     <p class="text-sm text-slate-200 whitespace-pre-wrap">{{ msg.text }}</p>
                     {% if msg.photo_file_id %}
@@ -268,35 +268,56 @@
             {% endif %}
         </div>
 
+        <!-- Replacement Form -->
+        {% if o.status.value in ['hold', 'disputed', 'question'] %}
+        <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 mb-3">
+            <span class="text-xs font-semibold text-slate-300 block mb-2 flex items-center space-x-1">
+                <i class="fa-solid fa-rotate text-amber-400"></i>
+                <span>Выдать замену со склада:</span>
+            </span>
+            <form method="POST" action="/orders/{{ o.id }}/replace" class="flex items-center space-x-2">
+                <select name="replacement_account_id" required class="flex-1 bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                    <option value="" disabled selected>-- Выберите аккаунт из наличия --</option>
+                    {% for acc in available_accounts %}
+                    <option value="{{ acc.id }}">[{{ acc.state }}] {{ acc.name }} ({{ acc.date_info }}) - ID:{{ acc.id }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" onclick="return confirm('Выдать выбранный аккаунт в качестве замены? Новый архив будет отправлен покупателю.')"
+                    class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap">
+                    🔄 Выдать замену
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
         <!-- Reply Input & Action Buttons -->
         <form method="POST" action="/orders/{{ o.id }}/message" class="space-y-3 pt-3 border-t border-slate-800">
             <div>
                 <textarea name="text" rows="2" required placeholder="Написать ответ покупателю в Telegram..."
                     class="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
             </div>
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center space-x-2">
-                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow transition-colors flex items-center space-x-1.5">
-                        <i class="fa-solid fa-paper-plane"></i>
-                        <span>Отправить в Telegram</span>
-                    </button>
-                </div>
-                {% if o.status.value in ['hold', 'disputed'] %}
-                <div class="flex items-center space-x-2">
-                    <form method="POST" action="/orders/{{ o.id }}/refund" onsubmit="return confirm('Вернуть средства клиенту?')">
-                        <button type="submit" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-colors">
-                            ✅ Вернуть покупателю
-                        </button>
-                    </form>
-                    <form method="POST" action="/orders/{{ o.id }}/reject" onsubmit="return confirm('Закрыть в пользу магазина?')">
-                        <button type="submit" class="px-3 py-2 bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/40 text-xs font-semibold rounded-xl transition-colors">
-                            ❌ Закрыть в пользу магазина
-                        </button>
-                    </form>
-                </div>
-                {% endif %}
+            <div class="flex items-center justify-between">
+                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow transition-colors flex items-center space-x-1.5">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>Отправить в Telegram</span>
+                </button>
             </div>
         </form>
+
+        {% if o.status.value in ['hold', 'disputed'] %}
+        <div class="flex items-center justify-end space-x-2 pt-2">
+            <form method="POST" action="/orders/{{ o.id }}/refund" onsubmit="return confirm('Вернуть средства клиенту?')">
+                <button type="submit" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-colors">
+                    ✅ Вернуть покупателю
+                </button>
+            </form>
+            <form method="POST" action="/orders/{{ o.id }}/reject" onsubmit="return confirm('Закрыть в пользу магазина?')">
+                <button type="submit" class="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/40 text-xs font-semibold rounded-xl transition-colors">
+                    ❌ Закрыть в пользу магазина
+                </button>
+            </form>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endfor %}

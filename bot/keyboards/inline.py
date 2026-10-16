@@ -17,6 +17,10 @@ from bot.keyboards.callbacks import (
     StartReviewCD,
     RateOrderCD,
     SkipReviewCD,
+    ChatViewCD,
+    ChatReplyCD,
+    AdminReplaceSelectCD,
+    AdminConfirmReplaceCD,
 )
 from bot.database.models import Category, Subcategory, Product, Account, Order, OrderStatus
 
@@ -26,15 +30,17 @@ def get_rules_kb() -> InlineKeyboardMarkup:
     builder.adjust(1)
     return builder.as_markup()
 
-def get_main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
+def get_main_menu(is_admin: bool = False, has_unread_chats: bool = False) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="🛍 Каталог", callback_data="catalog")
     builder.button(text="👤 Профиль", callback_data="profile")
+    chats_btn_text = "⚪️ 💬 Чаты" if has_unread_chats else "💬 Чаты"
+    builder.button(text=chats_btn_text, callback_data="my_chats")
     builder.button(text="📦 Мои заказы", callback_data="my_orders")
     builder.button(text="📜 Правила", callback_data="view_rules")
     if is_admin:
         builder.button(text="⚙️ Админ панель", callback_data="admin_menu")
-    builder.adjust(2, 2, 1 if is_admin else 0)
+    builder.adjust(2, 2, 1, 1 if is_admin else 0)
     return builder.as_markup()
 
 def get_categories_kb(categories: list[Category]) -> InlineKeyboardMarkup:
@@ -256,7 +262,77 @@ def get_my_orders_kb(orders: list[Order]) -> InlineKeyboardMarkup:
 def get_dispute_admin_kb(order_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="💬 Ответить в чат спора", callback_data=ReplyDisputeCD(order_id=order_id))
+    builder.button(text="🔄 Выдать замену со склада", callback_data=AdminReplaceSelectCD(order_id=order_id, page=1))
     builder.button(text="✅ Вернуть покупателю", callback_data=ResolveDisputeCD(order_id=order_id, action="refund"))
-    builder.button(text="❌ Закрыть спор (в пользу магазина)", callback_data=ResolveDisputeCD(order_id=order_id, action="reject"))
-    builder.adjust(1, 2)
+    builder.button(text="❌ Закрыть спор", callback_data=ResolveDisputeCD(order_id=order_id, action="reject"))
+    builder.adjust(1, 1, 2)
+    return builder.as_markup()
+
+def get_chats_list_kb(orders: list[Order]) -> InlineKeyboardMarkup:
+    """Список чатов пользователя по диспутам и вопросам"""
+    builder = InlineKeyboardBuilder()
+    for o in orders:
+        # Если в чате есть сообщение или непрочитано клиентом -> белый кружок в начало
+        has_msg = len(o.messages) > 0 or getattr(o, "user_unread", False)
+        prefix = "⚪️ " if has_msg else ""
+        kind = "Диспут" if (o.status == OrderStatus.DISPUTED or o.has_dispute) else "Вопрос"
+        btn_text = f"{prefix}{kind} по заказу {o.order_code}"
+        builder.button(text=btn_text, callback_data=ChatViewCD(order_id=o.id))
+
+    builder.button(text="◀️ Главное меню", callback_data="main_menu")
+    adjust_pattern = [1] * len(orders) + [1]
+    builder.adjust(*adjust_pattern)
+    return builder.as_markup()
+
+def get_chat_view_kb(order: Order) -> InlineKeyboardMarkup:
+    """Кнопки внутри конкретного чата"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✏️ Ответить в чат", callback_data=ChatReplyCD(order_id=order.id))
+    if order.status == OrderStatus.HOLD and not order.has_dispute:
+        builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
+    builder.button(text="◀️ Назад к чатам", callback_data="my_chats")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def get_admin_replace_accounts_kb(
+    order: Order,
+    accounts: list[Account],
+    page: int = 1,
+    page_size: int = 6
+) -> InlineKeyboardMarkup:
+    """Список аккаунтов со склада для выдачи замены администратором"""
+    builder = InlineKeyboardBuilder()
+    total_items = len(accounts)
+    total_pages = max(1, (total_items + page_size - 1) // page_size)
+    page = max(1, min(page, total_pages))
+
+    start = (page - 1) * page_size
+    end = start + page_size
+    current_page_accounts = accounts[start:end]
+
+    for acc in current_page_accounts:
+        # Показываем краткую строку аккаунта
+        acc_label = f"🔄 {acc.state} | {acc.name} | {acc.date_info}"
+        builder.button(
+            text=acc_label,
+            callback_data=AdminConfirmReplaceCD(order_id=order.id, account_id=acc.id)
+        )
+
+    # Пагинация
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(("◀️ Назад", AdminReplaceSelectCD(order_id=order.id, page=page - 1)))
+    if page < total_pages:
+        nav_buttons.append(("Вперед ▶️", AdminReplaceSelectCD(order_id=order.id, page=page + 1)))
+
+    for text, cd in nav_buttons:
+        builder.button(text=text, callback_data=cd)
+
+    builder.button(text="◀️ Отмена (к заказу)", callback_data=OrderCD(id=order.id))
+
+    adjust_pattern = [1] * len(current_page_accounts)
+    if nav_buttons:
+        adjust_pattern.append(len(nav_buttons))
+    adjust_pattern.append(1)
+    builder.adjust(*adjust_pattern)
     return builder.as_markup()

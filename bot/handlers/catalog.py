@@ -305,6 +305,7 @@ async def buy_specific_account(
     order = Order(
         user_id=user.tg_id,
         account_id=account.id,
+        account_data=account.data,
         product_id=product.id,
         amount=price,
         status=OrderStatus.HOLD,
@@ -401,6 +402,7 @@ async def buy_fast_freshest_account(
     order = Order(
         user_id=user.tg_id,
         account_id=account.id,
+        account_data=account.data,
         product_id=product.id,
         amount=price,
         status=OrderStatus.HOLD,

@@ -52,3 +52,17 @@ class RateOrderCD(CallbackData, prefix="ord_rate"):
 
 class SkipReviewCD(CallbackData, prefix="ord_rev_skip"):
     order_id: int
+
+class ChatViewCD(CallbackData, prefix="cht_v"):
+    order_id: int
+
+class ChatReplyCD(CallbackData, prefix="cht_r"):
+    order_id: int
+
+class AdminReplaceSelectCD(CallbackData, prefix="adm_repl_sel"):
+    order_id: int
+    page: int = 1
+
+class AdminConfirmReplaceCD(CallbackData, prefix="adm_repl_cfm"):
+    order_id: int
+    account_id: int

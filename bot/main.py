@@ -1,16 +1,16 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisStorage
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from bot.config import config
 from bot.database.base import init_db, async_session
 from bot.database.seed import seed_data
-from bot.database.models import Order, OrderStatus, User
+from bot.database.models import Order, OrderStatus, User, Account
 from bot.middlewares.db import DbSessionMiddleware
 from bot.handlers.common import common_router
 from bot.handlers.catalog import catalog_router
@@ -106,6 +106,17 @@ async def hold_and_dispute_sla_worker(session_pool, bot: Bot) -> None:
                             )
                         except Exception:
                             pass
+
+                # 3. Очистка проданных аккаунтов старше 7 дней (ретеншн 1 неделя)
+                seven_days_ago = now - timedelta(days=7)
+                stmt_del = (
+                    delete(Account)
+                    .where(Account.is_sold == True, Account.sold_at.is_not(None), Account.sold_at < seven_days_ago)
+                )
+                del_res = await session.execute(stmt_del)
+                if del_res.rowcount and del_res.rowcount > 0:
+                    await session.commit()
+                    logger.info(f"Purged {del_res.rowcount} sold accounts older than 7 days from database.")
 
         except asyncio.CancelledError:
             break

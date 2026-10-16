@@ -18,6 +18,9 @@ def generate_account_zip(order: Order, account: Account, product: Product) -> tu
     clean_order_code = order.order_code.replace("#", "").replace("/", "_")
     zip_filename = f"{clean_order_code}.zip"
 
+    created_dt = order.created_at or datetime.utcnow()
+    hold_dt = order.hold_until or (datetime.utcnow() + timedelta(hours=24))
+
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         # 1. Основные данные аккаунта
         account_txt = (
@@ -27,7 +30,7 @@ def generate_account_zip(order: Order, account: Account, product: Product) -> tu
             f"ФИО: {account.name}\n"
             f"Дата регистрации: {account.date_info}\n"
             f"ID Заказа: {order.order_code}\n"
-            f"Дата покупки: {order.created_at.strftime('%d.%m.%Y %H:%M UTC')}\n"
+            f"Дата покупки: {created_dt.strftime('%d.%m.%Y %H:%M UTC')}\n"
         )
         zf.writestr("account.txt", account_txt)
 
@@ -35,30 +38,44 @@ def generate_account_zip(order: Order, account: Account, product: Product) -> tu
         raw_content = account.raw_data or account.data
         zf.writestr("full_data.txt", raw_content)
 
-        # 3. Попытка извлечь чистые cookies в отдельный файл
-        if "Cookies:" in raw_content:
+        # 3. Сохранение cookies в отдельный файл
+        cookie_saved = False
+        if account.cookie_data:
+            cdata_str = account.cookie_data.strip()
             try:
-                cookies_part = raw_content.split("Cookies:", 1)[1].strip()
-                # Если cookies в json формате
-                first_bracket = cookies_part.find("[")
-                last_bracket = cookies_part.rfind("]")
-                if first_bracket != -1 and last_bracket != -1:
-                    json_str = cookies_part[first_bracket:last_bracket+1]
-                    parsed_cookies = json.loads(json_str)
+                if cdata_str.startswith(("[", "{")):
+                    parsed_cookies = json.loads(cdata_str)
                     zf.writestr("cookies.json", json.dumps(parsed_cookies, indent=2, ensure_ascii=False))
                 else:
-                    zf.writestr("cookies.txt", cookies_part[:100000])
+                    zf.writestr("cookies.txt", account.cookie_data)
+                cookie_saved = True
             except Exception:
-                pass
-        elif raw_content.strip().startswith("[") and raw_content.strip().endswith("]"):
-            try:
-                parsed_cookies = json.loads(raw_content)
-                zf.writestr("cookies.json", json.dumps(parsed_cookies, indent=2, ensure_ascii=False))
-            except Exception:
-                pass
+                zf.writestr("cookies.txt", account.cookie_data)
+                cookie_saved = True
+
+        if not cookie_saved:
+            if "Cookies:" in raw_content:
+                try:
+                    cookies_part = raw_content.split("Cookies:", 1)[1].strip()
+                    first_bracket = cookies_part.find("[")
+                    last_bracket = cookies_part.rfind("]")
+                    if first_bracket != -1 and last_bracket != -1:
+                        json_str = cookies_part[first_bracket:last_bracket+1]
+                        parsed_cookies = json.loads(json_str)
+                        zf.writestr("cookies.json", json.dumps(parsed_cookies, indent=2, ensure_ascii=False))
+                    else:
+                        zf.writestr("cookies.txt", cookies_part[:100000])
+                except Exception:
+                    pass
+            elif raw_content.strip().startswith("[") and raw_content.strip().endswith("]"):
+                try:
+                    parsed_cookies = json.loads(raw_content)
+                    zf.writestr("cookies.json", json.dumps(parsed_cookies, indent=2, ensure_ascii=False))
+                except Exception:
+                    pass
 
         # 4. Памятка покупателю (Kraken-стандарт)
-        hold_time_str = order.hold_until.strftime("%d.%m.%Y %H:%M UTC")
+        hold_time_str = hold_dt.strftime("%d.%m.%Y %H:%M UTC")
         memo_txt = (
             "=====================================================\n"
             f"ПАМЯТКА ПОКУПАТЕЛЯ ПО ЗАКАЗУ {order.order_code}\n"

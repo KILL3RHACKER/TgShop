@@ -6,11 +6,13 @@ from datetime import datetime, timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
+import pytest
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import select, func
 from bot.database.models import Base, Category, Subcategory, Product, Account, User, Order, OrderStatus, DisputeMessage
 
-async def run_bot_purchase_test():
+@pytest.mark.asyncio
+async def test_bot_purchase():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

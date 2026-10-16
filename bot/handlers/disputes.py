@@ -1,7 +1,8 @@
 import math
+import logging
 from datetime import datetime, timedelta
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from bot.config import config
-from bot.database.models import Order, OrderStatus, DisputeMessage, User, OrderReview
+from bot.database.models import Order, OrderStatus, DisputeMessage, User, OrderReview, Account, Product
 from bot.keyboards.callbacks import (
     OrderCD,
     OpenDisputeCD,
@@ -20,13 +21,24 @@ from bot.keyboards.callbacks import (
     StartReviewCD,
     RateOrderCD,
     SkipReviewCD,
+    ChatViewCD,
+    ChatReplyCD,
+    AdminReplaceSelectCD,
+    AdminConfirmReplaceCD,
 )
 from bot.keyboards.inline import (
     get_my_orders_tabs_kb,
     get_order_detail_kb,
     get_dispute_admin_kb,
     get_review_rating_kb,
+    get_chats_list_kb,
+    get_chat_view_kb,
+    get_admin_replace_accounts_kb,
+    get_order_delivery_kb,
 )
+from bot.services.account_zip import generate_account_zip
+
+logger = logging.getLogger(__name__)
 
 disputes_router = Router()
 
@@ -148,7 +160,7 @@ async def show_order_detail(
     else:
         status_text = order.status.value
 
-    acc_data = order.account.data if order.account else "—"
+    acc_data = order.account.data if order.account else (order.account_data or "—")
     prod_name = order.product.name if order.product else "—"
 
     text = (
@@ -248,6 +260,8 @@ async def process_client_dispute_message(
     order.last_reply_by = "client"
     order.last_reply_at = now
     order.dispute_deadline = now + timedelta(hours=24)
+    order.admin_unread = True
+    order.user_unread = False
 
     disp_msg = DisputeMessage(
         order_id=order.id,
@@ -342,6 +356,8 @@ async def process_client_question_message(
 
     order.last_reply_by = "client"
     order.last_reply_at = now
+    order.admin_unread = True
+    order.user_unread = False
 
     disp_msg = DisputeMessage(
         order_id=order.id,
@@ -426,6 +442,8 @@ async def process_admin_reply(
     now = datetime.utcnow()
     order.last_reply_by = "admin"
     order.last_reply_at = now
+    order.user_unread = True
+    order.admin_unread = False
     if order.status == OrderStatus.DISPUTED:
         order.dispute_deadline = now + timedelta(hours=24)
 
@@ -450,11 +468,12 @@ async def process_admin_reply(
     )
 
     builder = InlineKeyboardBuilder()
+    builder.button(text="💬 Открыть чат", callback_data=ChatViewCD(order_id=order.id))
     if order.status == OrderStatus.DISPUTED:
-        builder.button(text="💬 Ответить в диспут", callback_data=OpenDisputeCD(order_id=order.id))
+        builder.button(text="✏️ Ответить в диспут", callback_data=ChatReplyCD(order_id=order.id))
     else:
-        builder.button(text="💬 Ответить на сообщение", callback_data=AskQuestionCD(order_id=order.id))
-    builder.adjust(1)
+        builder.button(text="✏️ Ответить на вопрос", callback_data=ChatReplyCD(order_id=order.id))
+    builder.adjust(1, 1)
 
     try:
         if photo_id:
@@ -642,3 +661,256 @@ async def skip_review_comment(
     await callback.answer("Отзыв сохранен без комментария!")
     await state.clear()
     await callback.message.edit_text("🎉 <b>Спасибо за вашу оценку!</b> Отзыв сохранен.")
+
+# --- Структурированное форматирование чата и раздел «Чаты» ---
+
+def format_chat_messages(order: Order, messages: list[DisputeMessage]) -> str:
+    """
+    Структура чата:
+    Client(DD.MM.YYYY HH.MM) сообщение
+    Admin(DD.MM.YYYY HH.MM) сообщение
+    """
+    lines = []
+    for m in messages:
+        dt_str = m.created_at.strftime("%d.%m.%Y %H.%M")
+        role_label = "Client" if m.sender_role == "client" else "Admin"
+        content = m.text or ""
+        if m.photo_file_id and not content:
+            content = "[Скриншот]"
+        elif m.photo_file_id:
+            content = f"{content} [Скриншот]"
+        lines.append(f"{role_label}({dt_str}) {content}")
+    return "\n\n".join(lines) if lines else "<i>Сообщений в чате пока нет.</i>"
+
+@disputes_router.callback_query(F.data == "my_chats")
+async def show_my_chats(callback: CallbackQuery, session: AsyncSession):
+    await callback.answer()
+    user_id = callback.from_user.id
+
+    stmt = (
+        select(Order)
+        .where(
+            Order.user_id == user_id,
+            or_(
+                Order.has_dispute == True,
+                Order.status.in_([OrderStatus.DISPUTED, OrderStatus.QUESTION]),
+                Order.messages.any()
+            )
+        )
+        .order_by(Order.created_at.desc())
+    )
+    res = await session.execute(stmt)
+    chats_orders = list(res.scalars().all())
+
+    if not chats_orders:
+        text = (
+            "💬 <b>Ваши чаты по заказам</b>\n\n"
+            "У вас пока нет активных обращений, вопросов или диспутов.\n"
+            "Вы можете открыть диспут или задать вопрос по любому заказу из раздела 📦 <b>Мои заказы</b>."
+        )
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📦 Мои заказы", callback_data="my_orders")
+        builder.button(text="◀️ Главное меню", callback_data="main_menu")
+        builder.adjust(1)
+        try:
+            await callback.message.edit_text(text, reply_markup=builder.as_markup())
+        except Exception:
+            await callback.message.answer(text, reply_markup=builder.as_markup())
+        return
+
+    text = (
+        "💬 <b>Ваши чаты по заказам</b>\n\n"
+        "⚪️ — чаты с новыми сообщениями.\n"
+        "Выберите диалог для просмотра переписки:"
+    )
+    kb = get_chats_list_kb(chats_orders)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb)
+
+@disputes_router.callback_query(ChatViewCD.filter())
+async def view_chat_handler(
+    callback: CallbackQuery,
+    callback_data: ChatViewCD,
+    session: AsyncSession
+):
+    await callback.answer()
+    order = await session.get(Order, callback_data.order_id)
+    if not order or order.user_id != callback.from_user.id:
+        await callback.answer("Чат не найден.", show_alert=True)
+        return
+
+    # Отмечаем прочитанным
+    order.user_unread = False
+    await session.commit()
+
+    kind = "🚨 ДИСПУТ" if (order.status == OrderStatus.DISPUTED or order.has_dispute) else "❓ ВОПРОС"
+    sla_info = ""
+    if order.status == OrderStatus.DISPUTED and order.dispute_deadline:
+        time_left = order.dispute_deadline - datetime.utcnow()
+        hours, remainder = divmod(max(0, int(time_left.total_seconds())), 3600)
+        minutes = remainder // 60
+        whose = "магазина" if order.last_reply_by == "client" else "вашего ответа"
+        sla_info = f"\n⏱ <b>Осталось до ответа {whose}:</b> {hours}ч {minutes}м"
+
+    history_text = format_chat_messages(order, order.messages)
+    text = (
+        f"{kind} <b>ПО ЗАКАЗУ {order.order_code}</b>\n"
+        f"🏷 Товар: <b>{order.product.name if order.product else 'Аккаунт'}</b> (${order.amount:.2f})\n"
+        f"📊 Статус: <b>{order.status.value}</b>{sla_info}\n\n"
+        f"<b>История сообщений:</b>\n\n"
+        f"{history_text}"
+    )
+    kb = get_chat_view_kb(order)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb)
+
+@disputes_router.callback_query(ChatReplyCD.filter())
+async def reply_in_chat_prompt(
+    callback: CallbackQuery,
+    callback_data: ChatReplyCD,
+    state: FSMContext,
+    session: AsyncSession
+):
+    await callback.answer()
+    order = await session.get(Order, callback_data.order_id)
+    if not order or order.user_id != callback.from_user.id:
+        await callback.answer("Заказ не найден.", show_alert=True)
+        return
+
+    # Если это диспут
+    if order.status == OrderStatus.DISPUTED:
+        await state.set_state(DisputeStates.waiting_client_dispute)
+    else:
+        await state.set_state(DisputeStates.waiting_client_question)
+
+    await state.update_data(order_id=order.id)
+    await callback.message.answer(
+        f"✏️ <b>Ответ в чат по заказу {order.order_code}</b>\n\n"
+        "Введите текст сообщения или отправьте скриншот:"
+    )
+
+# --- Выдача замены администратором со склада ---
+
+@disputes_router.callback_query(AdminReplaceSelectCD.filter())
+async def admin_select_replacement_account(
+    callback: CallbackQuery,
+    callback_data: AdminReplaceSelectCD,
+    session: AsyncSession
+):
+    if callback.from_user.id != config.admin_id:
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+    await callback.answer()
+
+    order = await session.get(Order, callback_data.order_id)
+    if not order:
+        await callback.message.answer("Заказ не найден.")
+        return
+
+    # Приоритет: аккаунты того же товара
+    accounts: list[Account] = []
+    if order.product_id:
+        stmt = (
+            select(Account)
+            .where(Account.is_sold == False, Account.product_id == order.product_id)
+            .order_by(Account.created_at.desc(), Account.id.desc())
+        )
+        res = await session.execute(stmt)
+        accounts = list(res.scalars().all())
+
+    # Если в том же товаре нет, берем любые свободные со склада
+    if not accounts:
+        stmt_any = select(Account).where(Account.is_sold == False).order_by(Account.created_at.desc()).limit(30)
+        res_any = await session.execute(stmt_any)
+        accounts = list(res_any.scalars().all())
+
+    if not accounts:
+        await callback.message.answer("❌ На складе нет свободных аккаунтов для замены.")
+        return
+
+    text = (
+        f"🔄 <b>Выбор аккаунта для замены по заказу {order.order_code}</b>\n\n"
+        f"👤 Покупатель: <code>{order.user_id}</code>\n"
+        f"Выберите аккаунт из наличия со склада для автоматической выдачи:"
+    )
+    kb = get_admin_replace_accounts_kb(order, accounts, page=callback_data.page)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb)
+
+@disputes_router.callback_query(AdminConfirmReplaceCD.filter())
+async def admin_confirm_replacement(
+    callback: CallbackQuery,
+    callback_data: AdminConfirmReplaceCD,
+    session: AsyncSession,
+    bot: Bot
+):
+    if callback.from_user.id != config.admin_id:
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+    await callback.answer()
+
+    order = await session.get(Order, callback_data.order_id)
+    new_account = await session.get(Account, callback_data.account_id)
+
+    if not order or not new_account or new_account.is_sold:
+        await callback.message.answer("❌ Ошибка: заказ не найден или выбранный аккаунт уже продан.")
+        return
+
+    now = datetime.utcnow()
+    # 1. Помечаем новый аккаунт как проданный
+    new_account.is_sold = True
+    new_account.sold_to_user_id = order.user_id
+    new_account.sold_at = now
+
+    # 2. Обновляем заказ
+    order.account_id = new_account.id
+    order.account_data = new_account.data
+    order.status = OrderStatus.COMPLETED
+    order.resolved_at = now
+    order.last_reply_by = "admin"
+    order.last_reply_at = now
+    order.user_unread = True
+
+    # 3. Добавляем сообщение администратора в чат
+    replace_msg = DisputeMessage(
+        order_id=order.id,
+        sender_id=config.admin_id,
+        sender_role="admin",
+        text=f"Администратор предоставил замену по заказу: {new_account.data}"
+    )
+    session.add(replace_msg)
+    await session.commit()
+
+    # 4. Генерируем новый ZIP архив
+    product = order.product or Product(name="Замена по заказу", price=order.amount)
+    zip_bytes, zip_filename = generate_account_zip(order, new_account, product)
+    zip_file = BufferedInputFile(zip_bytes, filename=zip_filename)
+
+    # 5. Отправляем покупателю в Telegram
+    try:
+        await bot.send_document(
+            chat_id=order.user_id,
+            document=zip_file,
+            caption=(
+                f"🔄 <b>Администратор предоставил замену по заказу {order.order_code}!</b>\n\n"
+                f"📦 <b>Новые данные аккаунта:</b>\n"
+                f"<code>{new_account.data}</code>\n\n"
+                f"Архив с полными данными и cookies прикреплен выше.\n"
+                f"Спор закрыт в связи с выдачей замены."
+            ),
+            reply_markup=get_order_delivery_kb(order)
+        )
+    except Exception as e:
+        logger.error(f"Failed to send replacement zip to buyer {order.user_id}: {e}")
+
+    await callback.message.edit_text(
+        f"✅ <b>Замена по заказу {order.order_code} успешно выдана!</b>\n\n"
+        f"Выданный аккаунт: <code>{new_account.data}</code>\n"
+        f"Новый архив отправлен покупателю, заказ переведен в статус выполненных."
+    )

@@ -34,17 +34,28 @@ async def init_db() -> None:
                 ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_reply_at TIMESTAMP;
                 ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispute_deadline TIMESTAMP;
                 ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_dispute BOOLEAN DEFAULT FALSE;
+                ALTER TABLE orders ADD COLUMN IF NOT EXISTS account_data TEXT;
+                ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_unread BOOLEAN DEFAULT FALSE;
+                ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_unread BOOLEAN DEFAULT FALSE;
+                ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cookie_data TEXT;
             """))
     except Exception:
         pass
 
-    # Migration: add 'question' to orderstatus enum if using postgres enum
+    # Migration: add 'QUESTION' and 'question' to orderstatus enum if using postgres enum
     try:
         async with engine.begin() as conn:
             await conn.execute(text("""
                 DO $$
                 BEGIN
                     IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'orderstatus') THEN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_enum 
+                            JOIN pg_type ON pg_type.oid = pg_enum.enumtypid 
+                            WHERE pg_type.typname = 'orderstatus' AND pg_enum.enumlabel = 'QUESTION'
+                        ) THEN
+                            ALTER TYPE orderstatus ADD VALUE 'QUESTION';
+                        END IF;
                         IF NOT EXISTS (
                             SELECT 1 FROM pg_enum 
                             JOIN pg_type ON pg_type.oid = pg_enum.enumtypid 
