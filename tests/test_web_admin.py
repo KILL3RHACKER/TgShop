@@ -149,7 +149,7 @@ def test_full_flow():
     # 9. Orders view & Dispute
     resp = client.get("/orders")
     assert resp.status_code == 200
-    assert "#ORDER-1" in resp.text
+    assert "#ORD-1" in resp.text
 
     print("ALL WEB ADMIN 3-TIER AND ARCHIVE UPLOAD TESTS PASSED!")
 

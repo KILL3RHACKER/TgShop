@@ -81,7 +81,7 @@ async def show_order_detail(
     prod_name = order.product.name if order.product else "—"
 
     text = (
-        f"📋 <b>Заказ #ORDER-{order.id}</b>\n\n"
+        f"📋 <b>Заказ {order.order_code}</b>\n\n"
         f"🏷 Товар: <b>{prod_name}</b>\n"
         f"💵 Сумма: <b>${order.amount:.2f}</b>\n"
         f"📦 Аккаунт: <code>{acc_data}</code>\n"
@@ -119,7 +119,7 @@ async def start_open_dispute(
     await state.update_data(order_id=order.id)
 
     prompt = (
-        f"⚠️ <b>Чат спора по заказу #ORDER-{order.id}</b>\n\n"
+        f"⚠️ <b>Чат спора по заказу {order.order_code}</b>\n\n"
         f"Напишите сообщение с описанием проблемы и прикрепите доказательства (текст или скриншот ошибки).\n\n"
         f"<i>Сообщение будет мгновенно передано администрации магазина.</i>"
     )
@@ -169,13 +169,13 @@ async def process_client_dispute_message(
     await state.clear()
 
     await message.answer(
-        f"✅ <b>Сообщение передано в диспут #ORDER-{order.id}!</b>\n\n"
+        f"✅ <b>Сообщение передано в диспут {order.order_code}!</b>\n\n"
         f"Администратор уведомлен и рассмотрит доказательства. Вы получите ответ здесь в боте."
     )
 
     # Notify admin with action buttons
     admin_text = (
-        f"🚨 <b>ДИСПУТ ПО ЗАКАЗУ #ORDER-{order.id}</b>\n\n"
+        f"🚨 <b>ДИСПУТ ПО ЗАКАЗУ {order.order_code}</b>\n\n"
         f"👤 Покупатель: @{message.from_user.username or '—'} (<code>{order.user_id}</code>)\n"
         f"💵 Сумма: <b>${order.amount:.2f} USDT</b>\n"
         f"📦 Товар: <code>{order.account.data if order.account else '—'}</code>\n\n"
@@ -254,11 +254,11 @@ async def process_admin_reply(
     await session.commit()
     await state.clear()
 
-    await message.answer(f"✅ Ответ отправлен покупателю по заказу #ORDER-{order.id}.")
+    await message.answer(f"✅ Ответ отправлен покупателю по заказу {order.order_code}.")
 
     # Send to client
     client_notice = (
-        f"👨‍💼 <b>Ответ поддержки по спору #ORDER-{order.id}:</b>\n\n"
+        f"👨‍💼 <b>Ответ поддержки по спору {order.order_code}:</b>\n\n"
         f"{text or '<i>[Вложение]</i>'}"
     )
     try:
@@ -310,7 +310,7 @@ async def resolve_dispute(
         await session.commit()
 
         await callback.message.edit_text(
-            f"✅ <b>Диспут #ORDER-{order.id} решен в пользу покупателя.</b>\n"
+            f"✅ <b>Диспут {order.order_code} решен в пользу покупателя.</b>\n"
             f"Сумма ${order.amount:.2f} возвращена на баланс покупателя @{user.username if user else ''}."
         )
 
@@ -318,7 +318,7 @@ async def resolve_dispute(
             await bot.send_message(
                 chat_id=order.user_id,
                 text=(
-                    f"🎉 <b>Диспут по заказу #ORDER-{order.id} решен в вашу пользу!</b>\n\n"
+                    f"🎉 <b>Диспут по заказу {order.order_code} решен в вашу пользу!</b>\n\n"
                     f"Средства в размере <b>${order.amount:.2f} USDT</b> возвращены на ваш баланс магазина."
                 )
             )
@@ -331,7 +331,7 @@ async def resolve_dispute(
         await session.commit()
 
         await callback.message.edit_text(
-            f"❌ <b>Диспут #ORDER-{order.id} закрыт в пользу магазина.</b>\n"
+            f"❌ <b>Диспут {order.order_code} закрыт в пользу магазина.</b>\n"
             f"Средства окончательно разморожены."
         )
 
@@ -339,7 +339,7 @@ async def resolve_dispute(
             await bot.send_message(
                 chat_id=order.user_id,
                 text=(
-                    f"❌ <b>Диспут по заказу #ORDER-{order.id} закрыт администратором.</b>\n\n"
+                    f"❌ <b>Диспут по заказу {order.order_code} закрыт администратором.</b>\n\n"
                     f"Решение принято в пользу магазина. Средства не подлежат возврату."
                 )
             )

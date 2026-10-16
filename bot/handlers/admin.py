@@ -190,7 +190,7 @@ async def view_admin_dispute(callback: CallbackQuery, session: AsyncSession):
         history += f"• <b>{sender_label}:</b> {m.text}\n"
 
     text = (
-        f"🚨 <b>Диспут по заказу #ORDER-{order.id}</b>\n\n"
+        f"🚨 <b>Диспут по заказу {order.order_code}</b>\n\n"
         f"👤 Покупатель: @{user.username if user else '—'} (<code>{order.user_id}</code>)\n"
         f"💵 Сумма: <b>${order.amount:.2f} USDT</b>\n"
         f"📦 Товар: <code>{order.account.data if order.account else '—'}</code>\n\n"
@@ -224,7 +224,7 @@ async def list_hold_orders(callback: CallbackQuery, session: AsyncSession):
         remaining = o.hold_until - now
         hours, remainder = divmod(max(0, int(remaining.total_seconds())), 3600)
         minutes = remainder // 60
-        text += f"• <b>#ORDER-{o.id}</b>: ${o.amount:.2f} — осталось {hours}ч {minutes}м\n"
+        text += f"• <b>{o.order_code}</b>: ${o.amount:.2f} — осталось {hours}ч {minutes}м\n"
 
     builder.button(text="◀️ Назад", callback_data="admin_menu")
     builder.adjust(1)

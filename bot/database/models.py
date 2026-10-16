@@ -139,6 +139,41 @@ class Order(Base):
     @property
     def subcategory(self) -> Subcategory | None:
         return self.product.subcategory if self.product else None
+
+    @property
+    def product_code(self) -> str:
+        """
+        Зашифрованный / закодированный код товара.
+        Например: Truist | 7 Дней -> TRU7D, Chase 15 Дней -> CHA15D
+        """
+        p_name = self.product.name if self.product else ""
+        sub_name = self.product.subcategory.name if (self.product and self.product.subcategory) else ""
+        full_name = f"{sub_name} {p_name}".strip().upper()
+
+        m_days = re.search(r'(\d+)\s*(?:\+|ДН|DAY)', full_name)
+        days_tag = f"{m_days.group(1)}D" if m_days else ""
+
+        words = [w for w in re.findall(r'[A-Z0-9]+', full_name) if w not in ("ДНЕЙ", "ДНЯ", "ДЕНЬ", "DAYS", "DAY")]
+        prefix = ""
+        if words:
+            first = words[0]
+            if len(first) >= 3:
+                prefix = first[:3]
+            else:
+                prefix = "".join(w[:2] for w in words[:2])
+        if not prefix:
+            prefix = "PRD"
+        code = f"{prefix}{days_tag}" if days_tag else prefix
+        return code[:8]
+
+    @property
+    def order_code(self) -> str:
+        """
+        Формат ID заказа: #ORD-{id}-{product_code}
+        Например: #ORD-1-TRU7D
+        """
+        return f"#ORD-{self.id}-{self.product_code}"
+
     messages: Mapped[list["DisputeMessage"]] = relationship(
         back_populates="order",
         cascade="all, delete-orphan",

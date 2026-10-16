@@ -104,7 +104,7 @@
                     {% if orders %}
                         {% for o in orders %}
                         <tr class="hover:bg-slate-800/40 transition-colors">
-                            <td class="py-3.5 px-4 font-mono font-bold text-white text-xs">#ORDER-{{ o.id }}</td>
+                            <td class="py-3.5 px-4 font-mono font-bold text-white text-xs">{{ o.order_code }}</td>
                             <td class="py-3.5 px-4 text-xs">
                                 <div>
                                     <span class="font-semibold text-white">@{{ o.user.username if o.user and o.user.username else 'без юзернейма' }}</span>
@@ -206,7 +206,7 @@
 
         <div class="border-b border-slate-800 pb-4 mb-4">
             <div class="flex items-center space-x-2">
-                <span class="font-bold text-lg text-white">Диспут по заказу #ORDER-{{ o.id }}</span>
+                <span class="font-bold text-lg text-white">Диспут по заказу {{ o.order_code }}</span>
                 {% if o.status.value == 'disputed' %}
                 <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30">Активный спор</span>
                 {% elif o.status.value == 'hold' %}

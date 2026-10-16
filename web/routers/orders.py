@@ -122,7 +122,7 @@ async def send_dispute_message(
         await bot.send_message(
             chat_id=order.user_id,
             text=(
-                f"👨‍💼 <b>Сообщение от администрации по заказу #ORDER-{order.id}:</b>\n\n"
+                f"👨‍💼 <b>Сообщение от администрации по заказу {order.order_code}:</b>\n\n"
                 f"{clean_text}"
             ),
             reply_markup=kb.as_markup()
@@ -130,7 +130,7 @@ async def send_dispute_message(
     except Exception:
         pass
 
-    msg = quote(f"Ответ отправлен покупателю по заказу #{order.id}")
+    msg = quote(f"Ответ отправлен покупателю по заказу {order.order_code}")
     return RedirectResponse(url=f"/orders?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.post("/{order_id}/refund")
@@ -163,14 +163,14 @@ async def refund_order(
         await bot.send_message(
             chat_id=order.user_id,
             text=(
-                f"🎉 <b>Диспут по заказу #ORDER-{order.id} решен в вашу пользу!</b>\n\n"
+                f"🎉 <b>Диспут по заказу {order.order_code} решен в вашу пользу!</b>\n\n"
                 f"Средства в размере <b>${order.amount:.2f} USDT</b> возвращены на ваш баланс магазина."
             )
         )
     except Exception:
         pass
 
-    msg = quote(f"Возврат по заказу #{order.id} на сумму ${order.amount:.2f} успешно выполнен")
+    msg = quote(f"Возврат по заказу {order.order_code} на сумму ${order.amount:.2f} успешно выполнен")
     return RedirectResponse(url=f"/orders?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.post("/{order_id}/reject")
@@ -193,12 +193,12 @@ async def reject_dispute(
         await bot.send_message(
             chat_id=order.user_id,
             text=(
-                f"❌ <b>Диспут по заказу #ORDER-{order.id} закрыт администрацией.</b>\n\n"
+                f"❌ <b>Диспут по заказу {order.order_code} закрыт администрацией.</b>\n\n"
                 f"Решение принято в пользу магазина. Средства не подлежат возврату."
             )
         )
     except Exception:
         pass
 
-    msg = quote(f"Спор по заказу #{order.id} закрыт в пользу магазина")
+    msg = quote(f"Спор по заказу {order.order_code} закрыт в пользу магазина")
     return RedirectResponse(url=f"/orders?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)

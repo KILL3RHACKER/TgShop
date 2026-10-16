@@ -276,7 +276,7 @@ async def buy_specific_account(
 
     hold_str = hold_until.strftime("%d.%m.%Y %H:%M UTC")
     success_text = (
-        f"🎉 <b>Успешная покупка заказа #ORDER-{order.id}!</b>\n\n"
+        f"🎉 <b>Успешная покупка заказа {order.order_code}!</b>\n\n"
         f"🏷 <b>Товар:</b> {product.name}\n"
         f"💵 <b>Списано:</b> ${price:.2f}\n"
         f"💰 <b>Остаток баланса:</b> ${float(user.balance):.2f}\n\n"
@@ -294,7 +294,7 @@ async def buy_specific_account(
     # Notify admin
     try:
         admin_alert = (
-            f"💰 <b>Новый заказ #ORDER-{order.id} на ${price:.2f}!</b>\n\n"
+            f"💰 <b>Новый заказ {order.order_code} на ${price:.2f}!</b>\n\n"
             f"Покупатель: @{user.username or '—'} (<code>{user.tg_id}</code>)\n"
             f"Товар: <code>{account.data}</code>\n"
             f"Статус: ⏳ <b>Заморожено на 24 часа</b> (до {hold_str})"
@@ -363,7 +363,7 @@ async def buy_fast_freshest_account(
 
     hold_str = hold_until.strftime("%d.%m.%Y %H:%M UTC")
     success_text = (
-        f"⚡️ <b>Быстрая покупка #ORDER-{order.id}!</b>\n\n"
+        f"⚡️ <b>Быстрая покупка {order.order_code}!</b>\n\n"
         f"🏷 <b>Товар:</b> {product.name}\n"
         f"💵 <b>Списано:</b> ${price:.2f}\n"
         f"💰 <b>Остаток баланса:</b> ${float(user.balance):.2f}\n\n"
@@ -379,7 +379,7 @@ async def buy_fast_freshest_account(
 
     try:
         admin_alert = (
-            f"⚡️ <b>Быстрая покупка #ORDER-{order.id} на ${price:.2f}!</b>\n\n"
+            f"⚡️ <b>Быстрая покупка {order.order_code} на ${price:.2f}!</b>\n\n"
             f"Покупатель: @{user.username or '—'} (<code>{user.tg_id}</code>)\n"
             f"Товар: <code>{account.data}</code>\n"
             f"Статус: ⏳ <b>Заморожено на 24 часа</b> (до {hold_str})"
