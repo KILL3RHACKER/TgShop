@@ -19,6 +19,7 @@ from bot.keyboards.callbacks import (
     SkipReviewCD,
     ChatViewCD,
     ChatReplyCD,
+    DeleteChatCD,
     AdminReplaceSelectCD,
     AdminConfirmReplaceCD,
 )
@@ -278,9 +279,8 @@ def get_chats_list_kb(orders: list[Order]) -> InlineKeyboardMarkup:
     """Список чатов пользователя по диспутам и вопросам"""
     builder = InlineKeyboardBuilder()
     for o in orders:
-        # Если в чате есть сообщение или непрочитано клиентом -> белый кружок в начало
-        has_msg = len(o.messages) > 0 or getattr(o, "user_unread", False)
-        prefix = "⚪️ " if has_msg else ""
+        # Белый кружок ТОЛЬКО если есть непрочитанные сообщения покупателем (user_unread == True)
+        prefix = "⚪️ " if getattr(o, "user_unread", False) else ""
         kind = "Диспут" if (o.status == OrderStatus.DISPUTED or o.has_dispute) else "Вопрос"
         btn_text = f"{prefix}{kind} по заказу {o.order_code}"
         builder.button(text=btn_text, callback_data=ChatViewCD(order_id=o.id))
@@ -293,9 +293,9 @@ def get_chats_list_kb(orders: list[Order]) -> InlineKeyboardMarkup:
 def get_chat_view_kb(order: Order) -> InlineKeyboardMarkup:
     """Кнопки внутри конкретного чата"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="✏️ Ответить в чат", callback_data=ChatReplyCD(order_id=order.id))
     if order.status == OrderStatus.HOLD and not order.has_dispute:
         builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
+    builder.button(text="🗑 Удалить чат", callback_data=DeleteChatCD(order_id=order.id))
     builder.button(text="◀️ Назад к чатам", callback_data="my_chats")
     builder.adjust(1)
     return builder.as_markup()

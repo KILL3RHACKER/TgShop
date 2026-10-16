@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, delete
 
 from bot.config import config
 from bot.database.models import Order, OrderStatus, DisputeMessage, User, OrderReview, Account, Product
@@ -23,6 +23,7 @@ from bot.keyboards.callbacks import (
     SkipReviewCD,
     ChatViewCD,
     ChatReplyCD,
+    DeleteChatCD,
     AdminReplaceSelectCD,
     AdminConfirmReplaceCD,
 )
@@ -272,12 +273,10 @@ async def process_client_dispute_message(
     )
     session.add(disp_msg)
     await session.commit()
-    await state.clear()
+    await session.refresh(order)
 
-    await message.answer(
-        f"✅ <b>Сообщение отправлено в диспут {order.order_code}!</b>\n\n"
-        f"Магазин уведомлен. Время на ответ поддержки — 24 часа."
-    )
+    # Оставляем состояние активным, чтобы покупатель мог сразу писать дальше без кнопки ответить
+    await state.update_data(order_id=order.id)
 
     # Уведомление администратора
     admin_text = (
@@ -297,6 +296,18 @@ async def process_client_dispute_message(
             await bot.send_message(chat_id=config.admin_id, text=admin_text, reply_markup=kb)
     except Exception:
         pass
+
+    # Отправляем обновленный чат клиенту
+    history_text = format_chat_messages(order, order.messages)
+    text_chat = (
+        f"🚨 <b>ДИСПУТ ПО ЗАКАЗУ {order.order_code}</b>\n"
+        f"🏷 Товар: <b>{order.product.name if order.product else 'Аккаунт'}</b> (${order.amount:.2f})\n"
+        f"📊 Статус: <b>{order.status.value}</b>\n\n"
+        f"<b>История сообщений:</b>\n\n"
+        f"{history_text}\n\n"
+        f"<i>✅ Сообщение доставлено поддержке. Вы можете сразу написать следующее сообщение или прикрепить скриншот:</i>"
+    )
+    await message.answer(text_chat, reply_markup=get_chat_view_kb(order))
 
 # --- 2. Задать вопрос по заказу ---
 
@@ -368,12 +379,10 @@ async def process_client_question_message(
     )
     session.add(disp_msg)
     await session.commit()
-    await state.clear()
+    await session.refresh(order)
 
-    await message.answer(
-        f"✅ <b>Ваш вопрос по заказу {order.order_code} отправлен поддержке!</b>\n"
-        f"Ответ поступит в этот чат."
-    )
+    # Оставляем состояние активным
+    await state.update_data(order_id=order.id)
 
     admin_text = (
         f"❓ <b>ВОПРОС ПО ЗАКАЗУ {order.order_code}</b>\n\n"
@@ -394,6 +403,18 @@ async def process_client_question_message(
             await bot.send_message(chat_id=config.admin_id, text=admin_text, reply_markup=builder.as_markup())
     except Exception:
         pass
+
+    # Отправляем обновленный чат клиенту
+    history_text = format_chat_messages(order, order.messages)
+    reply_chat = (
+        f"❓ <b>ВОПРОС ПО ЗАКАЗУ {order.order_code}</b>\n"
+        f"🏷 Товар: <b>{order.product.name if order.product else 'Аккаунт'}</b> (${order.amount:.2f})\n"
+        f"📊 Статус: <b>{order.status.value}</b>\n\n"
+        f"<b>История сообщений:</b>\n\n"
+        f"{history_text}\n\n"
+        f"<i>✅ Вопрос доставлен поддержке. Вы можете сразу написать следующее сообщение или прикрепить скриншот:</i>"
+    )
+    await message.answer(reply_chat, reply_markup=get_chat_view_kb(order))
 
 # --- 3. Ответ администратора в чат ---
 
@@ -689,7 +710,9 @@ def format_chat_messages(order: Order, messages: list[DisputeMessage]) -> str:
     return "\n\n".join(lines) if lines else "<i>Сообщений в чате пока нет.</i>"
 
 @disputes_router.callback_query(F.data == "my_chats")
-async def show_my_chats(callback: CallbackQuery, session: AsyncSession):
+async def show_my_chats(callback: CallbackQuery, session: AsyncSession, state: FSMContext | None = None):
+    if state:
+        await state.clear()
     await callback.answer()
     user_id = callback.from_user.id
 
@@ -737,6 +760,7 @@ async def show_my_chats(callback: CallbackQuery, session: AsyncSession):
 async def view_chat_handler(
     callback: CallbackQuery,
     callback_data: ChatViewCD,
+    state: FSMContext,
     session: AsyncSession
 ):
     await callback.answer()
@@ -748,6 +772,13 @@ async def view_chat_handler(
     # Отмечаем прочитанным
     order.user_unread = False
     await session.commit()
+
+    # СРАЗУ АКТИВИРУЕМ FSM — МОЖНО ПИСАТЬ СРАЗУ БЕЗ НАЖАТИЯ КНОПОК
+    if order.status == OrderStatus.DISPUTED or order.has_dispute:
+        await state.set_state(DisputeStates.waiting_client_dispute)
+    else:
+        await state.set_state(DisputeStates.waiting_client_question)
+    await state.update_data(order_id=order.id)
 
     kind = "🚨 ДИСПУТ" if (order.status == OrderStatus.DISPUTED or order.has_dispute) else "❓ ВОПРОС"
     sla_info = ""
@@ -764,13 +795,41 @@ async def view_chat_handler(
         f"🏷 Товар: <b>{order.product.name if order.product else 'Аккаунт'}</b> (${order.amount:.2f})\n"
         f"📊 Статус: <b>{order.status.value}</b>{sla_info}\n\n"
         f"<b>История сообщений:</b>\n\n"
-        f"{history_text}"
+        f"{history_text}\n\n"
+        f"<i>✏️ Вы в чате. Отправьте сообщение или скриншот прямо сюда, чтобы ответить:</i>"
     )
     kb = get_chat_view_kb(order)
     try:
         await callback.message.edit_text(text, reply_markup=kb)
     except Exception:
         await callback.message.answer(text, reply_markup=kb)
+
+@disputes_router.callback_query(DeleteChatCD.filter())
+async def delete_chat_handler(
+    callback: CallbackQuery,
+    callback_data: DeleteChatCD,
+    state: FSMContext,
+    session: AsyncSession
+):
+    await callback.answer()
+    order = await session.get(Order, callback_data.order_id)
+    if not order or (order.user_id != callback.from_user.id and callback.from_user.id != config.admin_id):
+        await callback.answer("Чат не найден.", show_alert=True)
+        return
+
+    # Удаляем всю переписку из базы данных (удаляется у всех)
+    await session.execute(delete(DisputeMessage).where(DisputeMessage.order_id == order.id))
+    order.has_dispute = False
+    order.user_unread = False
+    order.admin_unread = False
+    order.dispute_deadline = None
+    if order.status in (OrderStatus.DISPUTED, OrderStatus.QUESTION):
+        order.status = OrderStatus.COMPLETED
+
+    await session.commit()
+    await state.clear()
+    await callback.answer("🗑 Чат удален у всех участников.", show_alert=True)
+    await show_my_chats(callback, session, state)
 
 @disputes_router.callback_query(ChatReplyCD.filter())
 async def reply_in_chat_prompt(

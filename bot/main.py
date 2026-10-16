@@ -172,6 +172,15 @@ async def main() -> None:
 
     logger.info("Bot starting...")
     try:
+        from aiogram.types import BotCommand, MenuButtonCommands
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Перезапустить бота")
+        ])
+        try:
+            await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        except Exception:
+            pass
+
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
     finally:

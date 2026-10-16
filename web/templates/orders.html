@@ -177,9 +177,10 @@
                             </td>
                             <td class="py-3.5 px-4 text-xs">
                                 {% if o.messages %}
-                                <button type="button" onclick="openDisputeModal({{ o.id }})" class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 hover:bg-indigo-500/25 transition-colors font-medium">
+                                <button type="button" onclick="openDisputeModal({{ o.id }})" class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg {% if o.admin_unread %}bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse{% else %}bg-indigo-500/15 text-indigo-400 border border-indigo-500/25{% endif %} hover:bg-indigo-500/25 transition-colors font-medium">
+                                    {% if o.admin_unread %}<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>{% endif %}
                                     <i class="fa-solid fa-comments"></i>
-                                    <span>{{ o.messages | length }} сообщ.</span>
+                                    <span>{{ o.messages | length }} сообщ.{% if o.admin_unread %} (новое){% endif %}</span>
                                 </button>
                                 {% else %}
                                 <span class="text-slate-500">Нет сообщений</span>
@@ -305,15 +306,34 @@
         </form>
 
         {% if o.status.value in ['hold', 'disputed'] %}
-        <div class="flex items-center justify-end space-x-2 pt-2">
-            <form method="POST" action="/orders/{{ o.id }}/refund" onsubmit="return confirm('Вернуть средства клиенту?')">
-                <button type="submit" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-colors">
-                    ✅ Вернуть покупателю
-                </button>
-            </form>
-            <form method="POST" action="/orders/{{ o.id }}/reject" onsubmit="return confirm('Закрыть в пользу магазина?')">
-                <button type="submit" class="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/40 text-xs font-semibold rounded-xl transition-colors">
-                    ❌ Закрыть в пользу магазина
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 mt-2">
+            <div>
+                <form method="POST" action="/orders/{{ o.id }}/delete-chat" onsubmit="return confirm('Удалить переписку по этому чату у всех участников?')" class="inline">
+                    <button type="submit" class="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-xs font-semibold rounded-xl transition-colors flex items-center space-x-1">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                        <span>Удалить чат у всех</span>
+                    </button>
+                </form>
+            </div>
+            <div class="flex items-center space-x-2">
+                <form method="POST" action="/orders/{{ o.id }}/refund" onsubmit="return confirm('Вернуть средства клиенту?')">
+                    <button type="submit" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-colors">
+                        ✅ Вернуть покупателю
+                    </button>
+                </form>
+                <form method="POST" action="/orders/{{ o.id }}/reject" onsubmit="return confirm('Закрыть в пользу магазина?')">
+                    <button type="submit" class="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/40 text-xs font-semibold rounded-xl transition-colors">
+                        ❌ Закрыть в пользу магазина
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 mt-2">
+            <form method="POST" action="/orders/{{ o.id }}/delete-chat" onsubmit="return confirm('Удалить переписку по этому чату у всех участников?')" class="inline">
+                <button type="submit" class="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-xs font-semibold rounded-xl transition-colors flex items-center space-x-1">
+                    <i class="fa-solid fa-trash-can text-xs"></i>
+                    <span>Удалить чат у всех</span>
                 </button>
             </form>
         </div>

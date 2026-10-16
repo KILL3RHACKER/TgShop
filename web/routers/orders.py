@@ -282,3 +282,27 @@ async def web_replace_order(
 
     msg = quote(f"Замена по заказу {order.order_code} успешно выдана")
     return RedirectResponse(url=f"/orders?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)
+
+@router.post("/{order_id}/delete-chat")
+async def web_delete_chat(
+    order_id: int,
+    admin: AdminUser,
+    session: AsyncSession = Depends(get_db),
+):
+    order = await session.get(Order, order_id)
+    if not order:
+        msg = quote("Заказ не найден")
+        return RedirectResponse(url=f"/orders?msg={msg}&msg_type=error", status_code=status.HTTP_303_SEE_OTHER)
+
+    from sqlalchemy import delete as sql_delete
+    await session.execute(sql_delete(DisputeMessage).where(DisputeMessage.order_id == order.id))
+    order.has_dispute = False
+    order.user_unread = False
+    order.admin_unread = False
+    order.dispute_deadline = None
+    if order.status in (OrderStatus.DISPUTED, OrderStatus.QUESTION):
+        order.status = OrderStatus.COMPLETED
+
+    await session.commit()
+    msg = quote(f"Чат по заказу {order.order_code} удален у всех участников")
+    return RedirectResponse(url=f"/orders?msg={msg}&msg_type=success", status_code=status.HTTP_303_SEE_OTHER)

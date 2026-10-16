@@ -59,6 +59,9 @@ class ChatViewCD(CallbackData, prefix="cht_v"):
 class ChatReplyCD(CallbackData, prefix="cht_r"):
     order_id: int
 
+class DeleteChatCD(CallbackData, prefix="cht_del"):
+    order_id: int
+
 class AdminReplaceSelectCD(CallbackData, prefix="adm_repl_sel"):
     order_id: int
     page: int = 1

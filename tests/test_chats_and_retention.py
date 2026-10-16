@@ -312,3 +312,80 @@ async def test_category_upload_auto_type_creation_no_under7():
 
     await engine.dispose()
 
+@pytest.mark.asyncio
+async def test_chat_sync_read_unread_and_delete():
+    """Проверка синхронизации прочитано/не прочитано (белый кружок) и полного удаления чата у всех"""
+    from bot.keyboards.inline import get_chats_list_kb
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with async_session() as session:
+        cat = Category(name="Truist")
+        session.add(cat)
+        await session.flush()
+        sub = Subcategory(category_id=cat.id, name="Truist | 7 Days")
+        session.add(sub)
+        await session.flush()
+        prod = Product(subcategory_id=sub.id, name="Truist | 7 Days", price=10.0)
+        session.add(prod)
+        await session.flush()
+
+        order = Order(
+            id=1,
+            user_id=12345,
+            product_id=prod.id,
+            amount=10.0,
+            status=OrderStatus.DISPUTED,
+            hold_until=datetime.utcnow() + timedelta(hours=24),
+            has_dispute=True,
+            user_unread=False,
+            admin_unread=True,
+        )
+        session.add(order)
+        await session.commit()
+        await session.refresh(order)
+
+        # 1. Покупатель не имеет непрочитанных сообщений -> БЕЗ белого кружка!
+        kb = get_chats_list_kb([order])
+        btn_text = kb.inline_keyboard[0][0].text
+        assert "⚪️" not in btn_text
+
+        # 2. Администратор присылает ответ -> user_unread становится True!
+        order.user_unread = True
+        order.admin_unread = False
+        msg_admin = DisputeMessage(order_id=order.id, sender_id=0, sender_role="admin", text="Здравствуйте")
+        session.add(msg_admin)
+        await session.commit()
+        await session.refresh(order)
+
+        # Теперь в списке чатов ОБЯЗАН быть белый кружок ⚪️!
+        kb_unread = get_chats_list_kb([order])
+        btn_text_unread = kb_unread.inline_keyboard[0][0].text
+        assert btn_text_unread.startswith("⚪️ ")
+
+        # 3. Покупатель открывает чат -> user_unread становится False, белый кружок исчезает!
+        order.user_unread = False
+        await session.commit()
+        await session.refresh(order)
+
+        kb_read = get_chats_list_kb([order])
+        btn_text_read = kb_read.inline_keyboard[0][0].text
+        assert "⚪️" not in btn_text_read
+
+        # 4. Удаление чата -> переписка удаляется у всех из базы данных
+        await session.execute(delete(DisputeMessage).where(DisputeMessage.order_id == order.id))
+        order.has_dispute = False
+        order.user_unread = False
+        order.admin_unread = False
+        order.status = OrderStatus.COMPLETED
+        await session.commit()
+
+        # Проверяем: сообщений в чате 0!
+        msgs_res = await session.execute(select(DisputeMessage).where(DisputeMessage.order_id == order.id))
+        assert len(list(msgs_res.scalars().all())) == 0
+
+    await engine.dispose()
+
