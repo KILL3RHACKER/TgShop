@@ -10,37 +10,33 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Migration: add min_days, max_days to products and state, registration_date to accounts
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(text("""
-                ALTER TABLE products ADD COLUMN IF NOT EXISTS min_days INTEGER;
-                ALTER TABLE products ADD COLUMN IF NOT EXISTS max_days INTEGER;
-                ALTER TABLE accounts ADD COLUMN IF NOT EXISTS state VARCHAR(16) DEFAULT 'US';
-                ALTER TABLE accounts ADD COLUMN IF NOT EXISTS registration_date DATE;
-                
-                -- Subcategory relaxations
-                ALTER TABLE subcategories ALTER COLUMN description DROP NOT NULL;
-                ALTER TABLE subcategories ALTER COLUMN description SET DEFAULT '';
-                ALTER TABLE subcategories ALTER COLUMN price DROP NOT NULL;
-                ALTER TABLE subcategories ALTER COLUMN price SET DEFAULT 0.0;
-
-                -- User rules acceptance
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS rules_accepted BOOLEAN DEFAULT FALSE;
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS rules_accepted_at TIMESTAMP;
-
-                -- Order SLA & dispute fields
-                ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_reply_by VARCHAR(16);
-                ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_reply_at TIMESTAMP;
-                ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispute_deadline TIMESTAMP;
-                ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_dispute BOOLEAN DEFAULT FALSE;
-                ALTER TABLE orders ADD COLUMN IF NOT EXISTS account_data TEXT;
-                ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_unread BOOLEAN DEFAULT FALSE;
-                ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_unread BOOLEAN DEFAULT FALSE;
-                ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cookie_data TEXT;
-            """))
-    except Exception:
-        pass
+    # Migration: DDL columns and constraints
+    ddl_statements = [
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS min_days INTEGER;",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS max_days INTEGER;",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS state VARCHAR(16) DEFAULT 'US';",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS registration_date DATE;",
+        "ALTER TABLE subcategories ALTER COLUMN description DROP NOT NULL;",
+        "ALTER TABLE subcategories ALTER COLUMN description SET DEFAULT '';",
+        "ALTER TABLE subcategories ALTER COLUMN price DROP NOT NULL;",
+        "ALTER TABLE subcategories ALTER COLUMN price SET DEFAULT 0.0;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS rules_accepted BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS rules_accepted_at TIMESTAMP;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_reply_by VARCHAR(16);",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_reply_at TIMESTAMP;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispute_deadline TIMESTAMP;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS has_dispute BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS account_data TEXT;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_unread BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_unread BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cookie_data TEXT;",
+    ]
+    for stmt in ddl_statements:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(stmt))
+        except Exception:
+            pass
 
     # Migration: add 'QUESTION' and 'question' to orderstatus enum if using postgres enum
     try:
