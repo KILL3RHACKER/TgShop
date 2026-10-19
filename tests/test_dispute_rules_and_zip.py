@@ -258,3 +258,67 @@ async def test_kraken_dispute_sla_auto_actions():
         assert o_store_silent.status == OrderStatus.REFUNDED
         assert float(user.balance) == 50.0  # Refund credited!
         assert o_client_silent.status == OrderStatus.COMPLETED  # Closed in store favor!
+
+@pytest.mark.asyncio
+async def test_zip_generation_when_account_is_none():
+    """Проверка генерации архива если аккаунт был удален по истечении 7 дней (account=None)"""
+    order = Order(
+        id=99,
+        user_id=123,
+        amount=20.0,
+        status=OrderStatus.COMPLETED,
+        hold_until=datetime.utcnow() - timedelta(days=8),
+        account_data="TX | DELETED USER | 01.10"
+    )
+    product = Product(id=1, name="Test Product", price=20.0)
+    zip_bytes, zip_filename = generate_account_zip(order, None, product)
+    assert zip_filename == "TX | DELETED USER | 01.10.zip"
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        assert set(zf.namelist()) == {"cookies.txt", "info.txt"}
+        info_text = zf.read("info.txt").decode("utf-8")
+        assert "TX | DELETED USER | 01.10" in info_text
+
+@pytest.mark.asyncio
+async def test_ticket_approval_and_rejection_lifecycle():
+    """Проверка атомарного аппрува и реджекта тикетов пополнения"""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    from bot.services.ticket import approve_ticket, reject_ticket
+    from bot.database.models import TopUpTicket, TicketStatus
+
+    async with session_maker() as session:
+        user = User(
+            tg_id=5555,
+            username="buyer5555",
+            balance=10.0,
+            tron_address="TAddr5555",
+            tron_private_key="key5555",
+            rules_accepted=True
+        )
+        session.add(user)
+        ticket = TopUpTicket(
+            id=1,
+            user_id=5555,
+            amount=50.0,
+            status=TicketStatus.PENDING,
+            expires_at=datetime.utcnow() + timedelta(minutes=15)
+        )
+        session.add(ticket)
+        await session.commit()
+
+        # Approve ticket
+        ok, msg = await approve_ticket(session, 1)
+        assert ok is True
+        await session.refresh(user)
+        await session.refresh(ticket)
+        assert float(user.balance) == 60.0
+        assert ticket.status == TicketStatus.APPROVED
+
+        # Second approval must fail (idempotent / no double credit)
+        ok2, msg2 = await approve_ticket(session, 1)
+        assert ok2 is False
+        await session.refresh(user)
+        assert float(user.balance) == 60.0

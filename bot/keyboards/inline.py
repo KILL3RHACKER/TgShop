@@ -229,12 +229,15 @@ def get_my_orders_tabs_kb(
 
 def get_order_detail_kb(order: Order, can_dispute: bool = True, has_review: bool = False) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    if order.status == OrderStatus.HOLD and can_dispute:
-        builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
+    if order.status == OrderStatus.HOLD:
+        if can_dispute:
+            builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
         builder.button(text="❓ Задать вопрос", callback_data=AskQuestionCD(order_id=order.id))
     elif order.status == OrderStatus.DISPUTED:
         builder.button(text="💬 Чат диспута (SLA 24h)", callback_data=OpenDisputeCD(order_id=order.id))
     elif order.status == OrderStatus.QUESTION:
+        if can_dispute:
+            builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
         builder.button(text="💬 Чат вопроса по заказу", callback_data=AskQuestionCD(order_id=order.id))
 
     # Возможность оставить отзыв (1-5 звезд)
@@ -252,19 +255,6 @@ def get_review_rating_kb(order_id: int) -> InlineKeyboardMarkup:
         builder.button(text=f"⭐️ {star}", callback_data=RateOrderCD(order_id=order_id, rating=star))
     builder.button(text="Пропустить отзыв", callback_data=SkipReviewCD(order_id=order_id))
     builder.adjust(5, 1)
-    return builder.as_markup()
-
-def get_my_orders_kb(orders: list[Order]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for o in orders:
-        status_icon = "⏳ Холд" if o.status == OrderStatus.HOLD else ("🚨 Диспут" if o.status == OrderStatus.DISPUTED else ("✅ Завершен" if o.status == OrderStatus.COMPLETED else "↩️ Возврат"))
-        sub_name = o.subcategory.name if o.subcategory else "Товар"
-        builder.button(
-            text=f"#{o.id} | {sub_name} (${o.amount:.2f}) [{status_icon}]",
-            callback_data=OrderCD(id=o.id)
-        )
-    builder.button(text="◀️ Главное меню", callback_data="main_menu")
-    builder.adjust(1)
     return builder.as_markup()
 
 def get_dispute_moderator_kb(order_id: int) -> InlineKeyboardMarkup:
@@ -286,14 +276,19 @@ def get_dispute_admin_kb(order_id: int) -> InlineKeyboardMarkup:
     builder.adjust(1, 1, 2)
     return builder.as_markup()
 
-def get_chats_list_kb(orders: list[Order]) -> InlineKeyboardMarkup:
+def get_chats_list_kb(orders: list[Order], is_staff: bool = False) -> InlineKeyboardMarkup:
     """Список чатов пользователя по диспутам и вопросам"""
     builder = InlineKeyboardBuilder()
     for o in orders:
-        # Белый кружок ТОЛЬКО если есть непрочитанные сообщения покупателем (user_unread == True)
-        prefix = "⚪️ " if getattr(o, "user_unread", False) else ""
+        # Белый кружок если есть непрочитанные сообщения
+        unread = getattr(o, "admin_unread", False) if is_staff else getattr(o, "user_unread", False)
+        prefix = "⚪️ " if unread else ""
         kind = "Диспут" if (o.status == OrderStatus.DISPUTED or o.has_dispute) else "Вопрос"
-        btn_text = f"{prefix}{kind} по заказу {o.order_code}"
+        if is_staff:
+            client_name = f"@{o.user.username}" if (o.user and o.user.username) else f"ID:{o.user_id}"
+            btn_text = f"{prefix}{kind} {o.order_code} ({client_name})"
+        else:
+            btn_text = f"{prefix}{kind} по заказу {o.order_code}"
         builder.button(text=btn_text, callback_data=ChatViewCD(order_id=o.id))
 
     builder.button(text="◀️ Главное меню", callback_data="main_menu")
@@ -301,12 +296,22 @@ def get_chats_list_kb(orders: list[Order]) -> InlineKeyboardMarkup:
     builder.adjust(*adjust_pattern)
     return builder.as_markup()
 
-def get_chat_view_kb(order: Order) -> InlineKeyboardMarkup:
+def get_chat_view_kb(order: Order, is_staff: bool = False) -> InlineKeyboardMarkup:
     """Кнопки внутри конкретного чата"""
     builder = InlineKeyboardBuilder()
-    if order.status == OrderStatus.HOLD and not order.has_dispute:
-        builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
-    builder.button(text="🗑 Удалить чат", callback_data=DeleteChatCD(order_id=order.id))
+    if is_staff:
+        if order.status == OrderStatus.DISPUTED:
+            builder.button(text="🔄 Выдать замену", callback_data=AdminReplaceSelectCD(order_id=order.id, page=1))
+            builder.button(text="✅ Одобрить возврат", callback_data=ResolveDisputeCD(order_id=order.id, action="refund"))
+            builder.button(text="❌ Закрыть в пользу шопа", callback_data=ResolveDisputeCD(order_id=order.id, action="reject"))
+        builder.button(text="🗑 Удалить чат", callback_data=DeleteChatCD(order_id=order.id))
+    else:
+        if (order.status == OrderStatus.HOLD or order.status == OrderStatus.QUESTION) and not order.has_dispute:
+            builder.button(text="⚠️ Открыть диспут", callback_data=OpenDisputeCD(order_id=order.id))
+        # Клиент НЕ может удалить чат диспута: кнопка доступна только для вопросов/холдов
+        if not (order.status == OrderStatus.DISPUTED or order.has_dispute):
+            builder.button(text="🗑 Удалить чат", callback_data=DeleteChatCD(order_id=order.id))
+
     builder.button(text="◀️ Назад к чатам", callback_data="my_chats")
     builder.adjust(1)
     return builder.as_markup()

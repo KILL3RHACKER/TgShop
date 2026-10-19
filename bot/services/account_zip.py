@@ -3,7 +3,7 @@ import re
 import zipfile
 from bot.database.models import Order, Account, Product
 
-def generate_account_zip(order: Order, account: Account, product: Product) -> tuple[bytes, str]:
+def generate_account_zip(order: Order, account: Account | None, product: Product | None) -> tuple[bytes, str]:
     """
     Генерирует ZIP-архив с данными купленного аккаунта.
     Требования:
@@ -32,25 +32,27 @@ def generate_account_zip(order: Order, account: Account, product: Product) -> tu
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         # 1. cookies.txt
         cookie_content = ""
-        if account.cookie_data and account.cookie_data.strip():
+        if account and account.cookie_data and account.cookie_data.strip():
             cookie_content = account.cookie_data.strip()
-        elif account.raw_data and "Cookies:" in account.raw_data:
+        elif account and account.raw_data and "Cookies:" in account.raw_data:
             try:
                 cookie_content = account.raw_data.split("Cookies:", 1)[1].strip()
             except Exception:
                 pass
-        elif account.raw_data and account.raw_data.strip().startswith(("[", "{")):
+        elif account and account.raw_data and account.raw_data.strip().startswith(("[", "{")):
             cookie_content = account.raw_data.strip()
 
         zf.writestr("cookies.txt", cookie_content)
 
         # 2. info.txt
         parts = []
-        if account.data:
+        if account and account.data:
             parts.append(account.data)
-        if account.raw_data and account.raw_data.strip() != account.data.strip():
+        elif order and order.account_data:
+            parts.append(order.account_data)
+        if account and account.raw_data and account.raw_data.strip() != (account.data or "").strip():
             parts.append(account.raw_data.strip())
-        info_content = "\n\n".join(parts) if parts else (account.data or "")
+        info_content = "\n\n".join(parts) if parts else (order.account_data or "")
         zf.writestr("info.txt", info_content)
 
     return zip_buffer.getvalue(), zip_filename

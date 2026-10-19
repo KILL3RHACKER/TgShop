@@ -261,8 +261,10 @@ async def upload_archive_accounts(
         if category_id and category_id > 0:
             stats = await add_accounts_to_category_auto_age(session, category_id, all_parsed_accounts)
             total_added = sum(stats.values())
+            duplicates_count = len(all_parsed_accounts) - total_added
             details_str = ", ".join(f"{k}: {v} шт." for k, v in stats.items())
-            msg = quote(f"🎉 Загружено {total_added} аккаунтов из {len(valid_files)} архива(ов)! Авто-сортировка: {details_str}")
+            dup_msg = f" | 🛡 Отсеяно дубликатов по SSN: {duplicates_count}" if duplicates_count > 0 else ""
+            msg = quote(f"🎉 Загружено {total_added} аккаунтов из {len(valid_files)} архива(ов)! Авто-сортировка: {details_str}{dup_msg}")
             return RedirectResponse(
                 url=f"/accounts?category_id={category_id}&msg={msg}&msg_type=success",
                 status_code=status.HTTP_303_SEE_OTHER,

@@ -34,6 +34,8 @@ async def init_db() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(16) DEFAULT 'buyer';",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS escalated_to_admin BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_reason VARCHAR(255);",
     ]
     for stmt in ddl_statements:
         try:
@@ -41,6 +43,44 @@ async def init_db() -> None:
                 await conn.execute(text(stmt))
         except Exception:
             pass
+
+    # SQLite compatibility for ADD COLUMN
+    if engine.dialect.name == "sqlite":
+        for stmt in [
+            "ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0;",
+            "ALTER TABLE users ADD COLUMN banned_reason VARCHAR(255);",
+        ]:
+            try:
+                async with engine.begin() as conn:
+                    await conn.execute(text(stmt))
+            except Exception:
+                pass
+
+    # Ensure restock_subscriptions table exists
+    create_restock_table_sql = """
+    CREATE TABLE IF NOT EXISTS restock_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL REFERENCES users(tg_id),
+        subcategory_id INTEGER NOT NULL REFERENCES subcategories(id) ON DELETE CASCADE,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+        CONSTRAINT uq_restock_subscriptions_user_subcategory UNIQUE (user_id, subcategory_id)
+    );
+    """ if engine.dialect.name != "sqlite" else """
+    CREATE TABLE IF NOT EXISTS restock_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id BIGINT NOT NULL,
+        subcategory_id INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(tg_id),
+        FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE CASCADE,
+        UNIQUE (user_id, subcategory_id)
+    );
+    """
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(create_restock_table_sql))
+    except Exception:
+        pass
 
     # Migration: add 'QUESTION' and 'question' to orderstatus enum if using postgres enum
     try:

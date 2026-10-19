@@ -18,6 +18,8 @@ from bot.handlers.profile import profile_router
 from bot.handlers.topup import topup_router
 from bot.handlers.admin import admin_router
 from bot.handlers.disputes import disputes_router
+from bot.admin_bot.router import admin_bot_router
+from bot.services.ticket import credit_admin_balance
 from web.services import sync_all_accounts_age_tiers
 
 logging.basicConfig(
@@ -40,13 +42,17 @@ async def hold_and_dispute_sla_worker(session_pool, bot: Bot) -> None:
             async with session_pool() as session:
                 now = datetime.utcnow()
 
-                # 1. Авто-закрытие заказов после 24h холда
-                stmt_hold = select(Order).where(Order.status == OrderStatus.HOLD, Order.hold_until <= now)
+                # 1. Авто-закрытие заказов после 24h холда (включая заказы с вопросами)
+                stmt_hold = select(Order).where(
+                    Order.status.in_([OrderStatus.HOLD, OrderStatus.QUESTION]),
+                    Order.hold_until <= now
+                )
                 res_hold = await session.execute(stmt_hold)
                 expired_holds = list(res_hold.scalars().all())
                 for order in expired_holds:
                     order.status = OrderStatus.COMPLETED
                     order.resolved_at = now
+                    await credit_admin_balance(session, float(order.amount))
                 if expired_holds:
                     await session.commit()
                     logger.info(f"Released 24h hold for {len(expired_holds)} completed orders.")
@@ -67,6 +73,7 @@ async def hold_and_dispute_sla_worker(session_pool, bot: Bot) -> None:
                         # Клиент не ответил за 24 часа -> закрытие в пользу магазина
                         disp.status = OrderStatus.COMPLETED
                         disp.resolved_at = now
+                        await credit_admin_balance(session, float(disp.amount))
                         await session.commit()
                         logger.info(f"Dispute {disp.order_code} auto-closed in store's favor (client SLA expired).")
                         try:
@@ -170,6 +177,19 @@ async def main() -> None:
     hold_task = asyncio.create_task(hold_and_dispute_sla_worker(async_session, bot))
     age_sync_task = asyncio.create_task(age_tier_sync_worker(async_session))
 
+    # Инициализация выделенного Admin Bot (если задан ADMIN_BOT_TOKEN)
+    admin_bot = None
+    admin_dp = None
+    if config.admin_bot_token and config.admin_bot_token.get_secret_value().strip():
+        admin_bot = Bot(
+            token=config.admin_bot_token.get_secret_value(),
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        )
+        admin_dp = Dispatcher(storage=storage)
+        admin_dp.update.middleware(DbSessionMiddleware(async_session))
+        admin_dp["shop_bot"] = bot
+        admin_dp.include_router(admin_bot_router)
+
     logger.info("Bot starting...")
     try:
         from aiogram.types import BotCommand, MenuButtonCommands
@@ -182,10 +202,30 @@ async def main() -> None:
             pass
 
         await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
+
+        if admin_bot and admin_dp:
+            try:
+                await admin_bot.set_my_commands([
+                    BotCommand(command="start", description="Терминал администрации"),
+                    BotCommand(command="mods", description="Список модераторов"),
+                    BotCommand(command="broadcast", description="Рассылка покупателям"),
+                ])
+                await admin_bot.delete_webhook(drop_pending_updates=True)
+            except Exception as e:
+                logger.warning(f"Failed to set admin_bot commands: {e}")
+
+            logger.info("Starting shop bot and admin bot concurrently...")
+            await asyncio.gather(
+                dp.start_polling(bot),
+                admin_dp.start_polling(admin_bot)
+            )
+        else:
+            await dp.start_polling(bot)
     finally:
         hold_task.cancel()
         age_sync_task.cancel()
+        if admin_bot:
+            await admin_bot.session.close()
         await bot.session.close()
         logger.info("Bot stopped.")
 

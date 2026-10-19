@@ -67,4 +67,4 @@ def test_archive_features():
     print("ALL TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
-    run_tests()
+    test_archive_features()

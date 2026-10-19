@@ -41,6 +41,7 @@ from bot.keyboards.inline import (
 )
 from bot.services.account_zip import generate_account_zip
 from bot.services.reputation import get_user_reputation, format_reputation_text
+from bot.services.ticket import credit_admin_balance
 
 logger = logging.getLogger(__name__)
 
@@ -135,11 +136,11 @@ async def show_order_detail(
         return
 
     now = datetime.utcnow()
-    is_hold = order.status == OrderStatus.HOLD
+    is_hold = order.status in (OrderStatus.HOLD, OrderStatus.QUESTION)
     can_dispute = is_hold and order.hold_until > now
 
     # Формирование статуса и SLA таймеров
-    if is_hold:
+    if order.status == OrderStatus.HOLD:
         remaining = max(timedelta(0), order.hold_until - now)
         hours, rem = divmod(int(remaining.total_seconds()), 3600)
         minutes = rem // 60
@@ -156,7 +157,10 @@ async def show_order_detail(
                 sla_info = f"\n⏱ <b>Очередь ответа: Магазин</b> (осталось {h}ч {m}м, иначе авто-возврат средств)"
         status_text = f"🚨 <b>Открыт диспут</b>{sla_info}"
     elif order.status == OrderStatus.QUESTION:
-        status_text = "❓ <b>Задан вопрос по заказу</b> (ожидается консультация)"
+        remaining = max(timedelta(0), order.hold_until - now)
+        hours, rem = divmod(int(remaining.total_seconds()), 3600)
+        minutes = rem // 60
+        status_text = f"❓ <b>Задан вопрос по заказу</b> (гарантийный холд ещё {hours}ч {minutes}м)"
     elif order.status == OrderStatus.REFUNDED:
         status_text = "↩️ <b>Возврат средств</b> (деньги возвращены на баланс)"
     elif order.status == OrderStatus.COMPLETED:
@@ -210,7 +214,7 @@ async def start_open_dispute(
         return
 
     now = datetime.utcnow()
-    if order.status == OrderStatus.COMPLETED or (order.status == OrderStatus.HOLD and order.hold_until <= now):
+    if order.status == OrderStatus.COMPLETED or (order.status in (OrderStatus.HOLD, OrderStatus.QUESTION) and order.hold_until <= now):
         await callback.answer("❌ Время на открытие диспута (24 часа) истекло.", show_alert=True)
         return
 
@@ -455,7 +459,9 @@ async def process_admin_reply(
     session: AsyncSession,
     bot: Bot
 ):
-    if message.from_user.id != config.admin_id:
+    caller = await session.scalar(select(User).where(User.tg_id == message.from_user.id))
+    is_staff = (message.from_user.id == config.admin_id) or (caller and caller.role in ("moderator", "admin"))
+    if not is_staff:
         return
 
     data = await state.get_data()
@@ -635,6 +641,7 @@ async def resolve_dispute(
     elif callback_data.action == "reject":
         order.status = OrderStatus.COMPLETED
         order.resolved_at = datetime.utcnow()
+        await credit_admin_balance(session, float(order.amount))
         await session.commit()
 
         await callback.message.edit_text(
@@ -714,6 +721,7 @@ async def process_rate_order(
     if order.status == OrderStatus.HOLD:
         order.status = OrderStatus.COMPLETED
         order.resolved_at = datetime.utcnow()
+        await credit_admin_balance(session, float(order.amount))
 
     await session.commit()
     await session.refresh(review)
@@ -793,27 +801,42 @@ async def show_my_chats(callback: CallbackQuery, session: AsyncSession, state: F
         await state.clear()
     await callback.answer()
     user_id = callback.from_user.id
+    caller = await session.scalar(select(User).where(User.tg_id == user_id))
+    is_staff = (user_id == config.admin_id) or (caller and caller.role in ("moderator", "admin"))
 
-    stmt = (
-        select(Order)
-        .where(
-            Order.user_id == user_id,
-            or_(
-                Order.has_dispute == True,
-                Order.status.in_([OrderStatus.DISPUTED, OrderStatus.QUESTION]),
-                Order.messages.any()
-            )
-        )
-        .order_by(Order.created_at.desc())
+    base_filter = or_(
+        Order.has_dispute == True,
+        Order.status.in_([OrderStatus.DISPUTED, OrderStatus.QUESTION]),
+        Order.messages.any()
     )
+
+    if is_staff:
+        stmt = (
+            select(Order)
+            .where(base_filter)
+            .order_by(Order.admin_unread.desc(), Order.created_at.desc())
+        )
+    else:
+        stmt = (
+            select(Order)
+            .where(Order.user_id == user_id, base_filter)
+            .order_by(Order.user_unread.desc(), Order.created_at.desc())
+        )
+
     res = await session.execute(stmt)
     chats_orders = list(res.scalars().all())
 
     if not chats_orders:
-        text = (
-            "💬 <b>Ваши чаты по заказам</b>\n\n"
-            "У вас пока нет активных обращений, вопросов или диспутов."
-        )
+        if is_staff:
+            text = (
+                "💬 <b>Чаты по заказам (Поддержка)</b>\n\n"
+                "В данный момент нет активных обращений, вопросов или диспутов от клиентов."
+            )
+        else:
+            text = (
+                "💬 <b>Ваши чаты по заказам</b>\n\n"
+                "У вас пока нет активных обращений, вопросов или диспутов."
+            )
         builder = InlineKeyboardBuilder()
         builder.button(text="◀️ Главное меню", callback_data="main_menu")
         builder.adjust(1)
@@ -823,12 +846,19 @@ async def show_my_chats(callback: CallbackQuery, session: AsyncSession, state: F
             await callback.message.answer(text, reply_markup=builder.as_markup())
         return
 
-    text = (
-        "💬 <b>Ваши чаты по заказам</b>\n\n"
-        "⚪️ — чаты с новыми сообщениями.\n"
-        "Выберите диалог для просмотра переписки:"
-    )
-    kb = get_chats_list_kb(chats_orders)
+    if is_staff:
+        text = (
+            "💬 <b>Чаты по заказам клиентов</b>\n\n"
+            "⚪️ — диалоги с новыми сообщениями от покупателя.\n"
+            "Выберите диалог для ответа:"
+        )
+    else:
+        text = (
+            "💬 <b>Ваши чаты по заказам</b>\n\n"
+            "⚪️ — чаты с новыми сообщениями.\n"
+            "Выберите диалог для просмотра переписки:"
+        )
+    kb = get_chats_list_kb(chats_orders, is_staff=is_staff)
     try:
         await callback.message.edit_text(text, reply_markup=kb)
     except Exception:
@@ -843,16 +873,24 @@ async def view_chat_handler(
 ):
     await callback.answer()
     order = await session.get(Order, callback_data.order_id)
-    if not order or order.user_id != callback.from_user.id:
+    caller = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+    is_staff = (callback.from_user.id == config.admin_id) or (caller and caller.role in ("moderator", "admin"))
+
+    if not order or (order.user_id != callback.from_user.id and not is_staff):
         await callback.answer("Чат не найден.", show_alert=True)
         return
 
     # Отмечаем прочитанным
-    order.user_unread = False
+    if is_staff:
+        order.admin_unread = False
+    else:
+        order.user_unread = False
     await session.commit()
 
     # СРАЗУ АКТИВИРУЕМ FSM — МОЖНО ПИСАТЬ СРАЗУ БЕЗ НАЖАТИЯ КНОПОК
-    if order.status == OrderStatus.DISPUTED or order.has_dispute:
+    if is_staff:
+        await state.set_state(DisputeStates.waiting_admin_reply)
+    elif order.status == OrderStatus.DISPUTED or order.has_dispute:
         await state.set_state(DisputeStates.waiting_client_dispute)
     else:
         await state.set_state(DisputeStates.waiting_client_question)
@@ -864,19 +902,20 @@ async def view_chat_handler(
         time_left = order.dispute_deadline - datetime.utcnow()
         hours, remainder = divmod(max(0, int(time_left.total_seconds())), 3600)
         minutes = remainder // 60
-        whose = "магазина" if order.last_reply_by == "client" else "вашего ответа"
+        whose = "магазина" if order.last_reply_by == "client" else "клиента"
         sla_info = f"\n⏱ <b>Осталось до ответа {whose}:</b> {hours}ч {minutes}м"
 
     history_text = format_chat_messages(order, order.messages)
+    hint_who = "Поддержка / Администрация" if is_staff else "Покупатель"
     text = (
         f"{kind} <b>ПО ЗАКАЗУ {order.order_code}</b>\n"
         f"🏷 Товар: <b>{order.product.name if order.product else 'Аккаунт'}</b> (${order.amount:.2f})\n"
         f"📊 Статус: <b>{order.status.value}</b>{sla_info}\n\n"
         f"<b>История сообщений:</b>\n\n"
         f"{history_text}\n\n"
-        f"<i>✏️ Вы в чате. Отправьте сообщение или скриншот прямо сюда, чтобы ответить:</i>"
+        f"<i>✏️ Вы в чате ({hint_who}). Отправьте сообщение или скриншот прямо сюда, чтобы ответить:</i>"
     )
-    kb = get_chat_view_kb(order)
+    kb = get_chat_view_kb(order, is_staff=is_staff)
     try:
         await callback.message.edit_text(text, reply_markup=kb)
     except Exception:
@@ -891,8 +930,16 @@ async def delete_chat_handler(
 ):
     await callback.answer()
     order = await session.get(Order, callback_data.order_id)
-    if not order or (order.user_id != callback.from_user.id and callback.from_user.id != config.admin_id):
+    caller = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+    is_staff = (callback.from_user.id == config.admin_id) or (caller and caller.role in ("moderator", "admin"))
+
+    if not order or (order.user_id != callback.from_user.id and not is_staff):
         await callback.answer("Чат не найден.", show_alert=True)
+        return
+
+    # Клиент не может удалить чат диспута
+    if not is_staff and (order.status == OrderStatus.DISPUTED or order.has_dispute):
+        await callback.answer("❌ Нельзя удалить чат активного диспута. Ожидайте решения поддержки.", show_alert=True)
         return
 
     # Удаляем всю переписку из базы данных (удаляется у всех)
@@ -906,7 +953,7 @@ async def delete_chat_handler(
 
     await session.commit()
     await state.clear()
-    await callback.answer("🗑 Чат удален у всех участников.", show_alert=True)
+    await callback.answer("🗑 Чат удален.", show_alert=True)
     await show_my_chats(callback, session, state)
 
 @disputes_router.callback_query(ChatReplyCD.filter())
@@ -918,12 +965,17 @@ async def reply_in_chat_prompt(
 ):
     await callback.answer()
     order = await session.get(Order, callback_data.order_id)
-    if not order or order.user_id != callback.from_user.id:
+    caller = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+    is_staff = (callback.from_user.id == config.admin_id) or (caller and caller.role in ("moderator", "admin"))
+
+    if not order or (order.user_id != callback.from_user.id and not is_staff):
         await callback.answer("Заказ не найден.", show_alert=True)
         return
 
-    # Если это диспут
-    if order.status == OrderStatus.DISPUTED:
+    # Если это админ/модератор
+    if is_staff:
+        await state.set_state(DisputeStates.waiting_admin_reply)
+    elif order.status == OrderStatus.DISPUTED:
         await state.set_state(DisputeStates.waiting_client_dispute)
     else:
         await state.set_state(DisputeStates.waiting_client_question)
@@ -942,7 +994,9 @@ async def admin_select_replacement_account(
     callback_data: AdminReplaceSelectCD,
     session: AsyncSession
 ):
-    if callback.from_user.id != config.admin_id:
+    caller = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+    is_staff = (callback.from_user.id == config.admin_id) or (caller and caller.role in ("moderator", "admin"))
+    if not is_staff:
         await callback.answer("Доступ запрещен.", show_alert=True)
         return
     await callback.answer()
@@ -991,7 +1045,9 @@ async def admin_confirm_replacement(
     session: AsyncSession,
     bot: Bot
 ):
-    if callback.from_user.id != config.admin_id:
+    caller = await session.scalar(select(User).where(User.tg_id == callback.from_user.id))
+    is_staff = (callback.from_user.id == config.admin_id) or (caller and caller.role in ("moderator", "admin"))
+    if not is_staff:
         await callback.answer("Доступ запрещен.", show_alert=True)
         return
     await callback.answer()
@@ -1014,14 +1070,15 @@ async def admin_confirm_replacement(
     order.account_data = new_account.data
     order.status = OrderStatus.COMPLETED
     order.resolved_at = now
+    await credit_admin_balance(session, float(order.amount))
     order.last_reply_by = "admin"
     order.last_reply_at = now
     order.user_unread = True
 
-    # 3. Добавляем сообщение администратора в чат
+    # 3. Добавляем сообщение администратора/модератора в чат
     replace_msg = DisputeMessage(
         order_id=order.id,
-        sender_id=config.admin_id,
+        sender_id=callback.from_user.id,
         sender_role="admin",
         text=f"Администратор предоставил замену по заказу: {new_account.data}"
     )

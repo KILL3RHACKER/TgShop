@@ -6,6 +6,7 @@ from sqlalchemy import select, func, desc, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.models import Order, OrderStatus, DisputeMessage, User, Account
+from bot.services.ticket import credit_admin_balance
 from web.auth import AdminUser
 from web.dependencies import get_db, get_bot
 
@@ -35,15 +36,21 @@ async def list_orders(
 
     search = q.strip()
     if search:
+        decrypted = Order.decrypt_order_code(search)
         if search.isdigit():
             conditions.append(or_(Order.id == int(search), Order.user_id == int(search)))
+        elif decrypted and decrypted.get("user_id"):
+            conditions.append(Order.user_id == int(decrypted["user_id"]))
         else:
             # Match on username or account data
             user_ids_res = await session.execute(
                 select(User.tg_id).where(User.username.ilike(f"%{search}%"))
             )
             matching_user_ids = list(user_ids_res.scalars().all())
-            conditions.append(Order.user_id.in_(matching_user_ids))
+            conditions.append(or_(
+                Order.user_id.in_(matching_user_ids),
+                Order.account_data.ilike(f"%{search}%")
+            ))
 
     stmt = select(Order).order_by(desc(Order.created_at))
     if conditions:
@@ -210,6 +217,7 @@ async def reject_dispute(
 
     order.status = OrderStatus.COMPLETED
     order.resolved_at = datetime.utcnow()
+    await credit_admin_balance(session, float(order.amount))
     await session.commit()
 
     try:
@@ -249,6 +257,7 @@ async def web_replace_order(
     order.account_data = new_acc.data
     order.status = OrderStatus.COMPLETED
     order.resolved_at = now
+    await credit_admin_balance(session, float(order.amount))
     order.last_reply_by = "admin"
     order.last_reply_at = now
     order.user_unread = True

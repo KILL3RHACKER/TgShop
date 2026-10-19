@@ -716,7 +716,7 @@ def parse_archive_by_files(filename: str, archive_bytes: bytes) -> tuple[dict[st
                     continue
 
                 base_name = os.path.splitext(os.path.basename(info.filename))[0].strip()
-                lines = [parse_account_line(l) for l in text.splitlines() if parse_account_line(l)]
+                lines = [p for l in text.splitlines() if (p := parse_account_line(l))]
                 if lines:
                     files_processed += 1
                     file_map.setdefault(base_name, []).extend(lines)
@@ -761,7 +761,7 @@ def parse_archive_by_files(filename: str, archive_bytes: bytes) -> tuple[dict[st
                     if text is None:
                         continue
                     base_name = os.path.splitext(file)[0].strip()
-                    lines = [parse_account_line(l) for l in text.splitlines() if parse_account_line(l)]
+                    lines = [p for l in text.splitlines() if (p := parse_account_line(l))]
                     if lines:
                         files_processed += 1
                         file_map.setdefault(base_name, []).extend(lines)

@@ -280,50 +280,100 @@
 </div>
 
 <!-- ================= MODAL: ARCHIVE UPLOAD (ZIP / RAR) ================= -->
-<div id="zip-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
-        <button onclick="closeModal('zip-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
-            <i class="fa-solid fa-xmark text-lg"></i>
+<div id="zip-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md hidden transition-all">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl p-6 sm:p-7 shadow-2xl relative flex flex-col">
+        <button onclick="closeModal('zip-modal')" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
+            <i class="fa-solid fa-xmark text-sm"></i>
         </button>
-        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-1">
-            <i class="fa-solid fa-file-zipper text-indigo-400"></i>
-            <span>Загрузка архива ZIP / RAR в Категорию</span>
-        </h3>
-        <p class="text-xs text-slate-400 mb-4">
-            Формат строк: <code>ST | NAME SURNAME | DD.MM</code> (ST — штат США).<br>
-            Сервер сам рассчитает возраст в днях и разложит аккаунты по категориям-тирам: <b>7+, 15+, 30+ дней</b>.
-            На 15-й день аккаунты автоматически взрослеют и переходят в 15+!
-        </p>
 
-        <form method="POST" action="/accounts/upload-archive" enctype="multipart/form-data" class="space-y-4">
+        <div class="flex items-center space-x-3 mb-2">
+            <span class="w-10 h-10 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center text-lg shadow-inner">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+            </span>
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Категория *</label>
-                <select name="category_id" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    {% for cat in categories %}
-                    <option value="{{ cat.id }}">
-                        📁 {{ cat.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-                <p class="text-[11px] text-slate-500 mt-1">Аккаунты будут автоматически распределены по тирам отлёжки (7-14 дн., 15-29 дн., 30+ дн.) внутри выбранной категории.</p>
+                <h3 class="text-lg font-bold text-white leading-tight">Загрузка аккаунтов</h3>
+                <p class="text-xs text-slate-400">Автоматическая сортировка по тирам и проверка на дубли</p>
+            </div>
+        </div>
+
+        <form id="archive-upload-form" method="POST" action="/accounts/upload-archive" enctype="multipart/form-data" class="space-y-4 mt-3" onsubmit="handleUploadSubmit(event)">
+            <!-- Category (Bank) Selection -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                    <span>1. Выберите банк (Категорию) *</span>
+                </label>
+                <div class="relative">
+                    <select name="category_id" id="upload-category-id" required class="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-medium cursor-pointer">
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}">
+                            📁 {{ cat.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <i class="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none text-xs"></i>
+                </div>
+                <div class="flex items-center space-x-2 mt-1.5 text-[11px] text-slate-500">
+                    <i class="fa-solid fa-circle-check text-emerald-400/80"></i>
+                    <span>Тиры <b>7 Days</b>, <b>15 Days</b>, <b>30+ Days</b> сформируются автоматически</span>
+                </div>
             </div>
 
+            <!-- Drag & Drop Zone -->
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Файлы архивов (.zip, .rar) *</label>
-                <input type="file" id="archive_files" name="archive_files" multiple accept=".zip,.rar" required
-                    onchange="updateArchiveFilesList(this)"
-                    class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
-                <div id="archive-files-preview" class="text-[11px] text-indigo-400 mt-1 font-medium hidden"></div>
-                <p class="text-[11px] text-slate-500 mt-1">Поддерживается выбор нескольких архивов сразу (.zip / .rar), а также архивы с вложенными архивами внутри.</p>
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                    <span>2. Выберите или перетащите архивы (.zip, .rar) *</span>
+                </label>
+                
+                <input type="file" id="archive_files" name="archive_files" multiple accept=".zip,.rar" class="hidden" onchange="handleFileSelect(this)">
+                
+                <div id="dropzone" onclick="document.getElementById('archive_files').click()"
+                    class="border-2 border-dashed border-slate-700 hover:border-indigo-500/80 bg-slate-950/60 hover:bg-indigo-950/15 rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 group relative">
+                    <div class="flex flex-col items-center justify-center pointer-events-none">
+                        <div class="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-indigo-400 group-hover:text-indigo-300 group-hover:scale-110 transition-all mb-2.5">
+                            <i class="fa-solid fa-file-zipper text-xl"></i>
+                        </div>
+                        <p class="text-sm font-semibold text-slate-200 group-hover:text-white">
+                            Нажмите или перетащите архивы сюда
+                        </p>
+                        <p class="text-xs text-slate-500 mt-1">
+                            Поддерживаются <b>.zip</b>, <b>.rar</b> (папки с логами, вложенные архивы, cookies)
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Selected Files List -->
+                <div id="selected-files-container" class="mt-2.5 space-y-1.5 max-h-40 overflow-y-auto hidden pr-1"></div>
             </div>
 
-            <div class="pt-2 flex justify-end space-x-2">
-                <button type="button" onclick="closeModal('zip-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
-                    Отмена
-                </button>
-                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30">
-                    Распаковать и отсортировать
-                </button>
+            <!-- SSN Deduplication Notice -->
+            <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 flex items-start space-x-2.5">
+                <i class="fa-solid fa-fingerprint text-amber-400 text-sm mt-0.5"></i>
+                <div class="leading-relaxed">
+                    <b class="text-slate-200">Умная дедупликация по SSN:</b> Система сверяет Social Security Number каждого аккаунта с базой. Повторные логи одного клиента будут отсеяны.
+                </div>
+            </div>
+
+            <!-- Action Buttons & Progress -->
+            <div class="pt-2">
+                <div id="upload-progress-box" class="hidden mb-3">
+                    <div class="flex items-center justify-between text-xs text-indigo-400 font-medium mb-1">
+                        <span>Распаковка и дедупликация базы...</span>
+                        <i class="fa-solid fa-circle-notch fa-spin"></i>
+                    </div>
+                    <div class="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                        <div class="bg-indigo-500 h-1.5 rounded-full animate-pulse w-full"></div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end space-x-2.5">
+                    <button type="button" onclick="closeModal('zip-modal')" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl transition-colors">
+                        Отмена
+                    </button>
+                    <button type="submit" id="upload-submit-btn" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center space-x-2">
+                        <i class="fa-solid fa-bolt"></i>
+                        <span>Распаковать и добавить</span>
+                    </button>
+                </div>
             </div>
         </form>
     </div>
@@ -468,16 +518,110 @@
         cb.addEventListener('change', updateBulkBar);
     });
 
-    function updateArchiveFilesList(input) {
-        const preview = document.getElementById('archive-files-preview');
-        if (!preview) return;
-        if (input.files && input.files.length > 0) {
-            const names = Array.from(input.files).map(f => f.name).join(', ');
-            preview.textContent = '📁 Выбрано архивов (' + input.files.length + '): ' + names;
-            preview.classList.remove('hidden');
-        } else {
-            preview.classList.add('hidden');
+    // Drag-and-Drop & File Queue Management
+    let uploadFilesDt = new DataTransfer();
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('archive_files');
+    const filesContainer = document.getElementById('selected-files-container');
+    const submitBtn = document.getElementById('upload-submit-btn');
+
+    function formatBytes(bytes, decimals = 1) {
+        if (!+bytes) return '0 B';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+    }
+
+    function renderSelectedFiles() {
+        if (!filesContainer) return;
+        filesContainer.innerHTML = '';
+        if (uploadFilesDt.files.length === 0) {
+            filesContainer.classList.add('hidden');
+            return;
         }
+
+        filesContainer.classList.remove('hidden');
+        Array.from(uploadFilesDt.files).forEach((file, index) => {
+            const chip = document.createElement('div');
+            chip.className = 'flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 animate-fadeIn';
+            chip.innerHTML = `
+                <div class="flex items-center space-x-2 truncate pr-2">
+                    <i class="fa-solid fa-file-zipper text-indigo-400 text-sm"></i>
+                    <span class="truncate font-medium">${file.name}</span>
+                    <span class="text-[11px] text-slate-500 font-mono">(${formatBytes(file.size)})</span>
+                </div>
+                <button type="button" onclick="removeUploadFile(${index})" class="w-6 h-6 rounded-lg bg-slate-900 hover:bg-rose-950/60 hover:text-rose-400 text-slate-500 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark text-xs"></i>
+                </button>
+            `;
+            filesContainer.appendChild(chip);
+        });
+    }
+
+    function handleFileSelect(input) {
+        if (input.files) {
+            for (let f of input.files) {
+                uploadFilesDt.items.add(f);
+            }
+            fileInput.files = uploadFilesDt.files;
+            renderSelectedFiles();
+        }
+    }
+
+    function removeUploadFile(index) {
+        const newDt = new DataTransfer();
+        Array.from(uploadFilesDt.files).forEach((f, i) => {
+            if (i !== index) newDt.items.add(f);
+        });
+        uploadFilesDt = newDt;
+        fileInput.files = uploadFilesDt.files;
+        renderSelectedFiles();
+    }
+
+    if (dropzone) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.add('border-indigo-500', 'bg-indigo-950/20', 'scale-[1.01]');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.remove('border-indigo-500', 'bg-indigo-950/20', 'scale-[1.01]');
+            }, false);
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            if (dt && dt.files && dt.files.length > 0) {
+                for (let f of dt.files) {
+                    uploadFilesDt.items.add(f);
+                }
+                fileInput.files = uploadFilesDt.files;
+                renderSelectedFiles();
+            }
+        });
+    }
+
+    function handleUploadSubmit(e) {
+        if (uploadFilesDt.files.length === 0) {
+            e.preventDefault();
+            alert('Пожалуйста, выберите хотя бы один архив (.zip или .rar)');
+            return;
+        }
+
+        const progressBox = document.getElementById('upload-progress-box');
+        if (progressBox) progressBox.classList.remove('hidden');
+
+        submitBtn.disabled = true;
+        submitBtn.className = "px-5 py-2.5 bg-indigo-700/60 text-slate-400 text-sm font-semibold rounded-xl flex items-center space-x-2 cursor-not-allowed";
+        submitBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i><span>Распаковка и дедупликация...</span>';
     }
 </script>
 {% endblock %}

@@ -53,14 +53,13 @@ async def test_order_code_encrypted_product_name():
         await session.commit()
         await session.refresh(order)
 
-        # Проверяем, что ID заказа — это TRU-{encrypted(Days-Time-UserID)}
-        assert order.bank_code == "TRU"
-        assert order.order_code.startswith("TRU-")
+        # Проверяем, что ID заказа — это формат вида XXXX-XXXX-XXXX-XXXX (как LZAD-4234-YLPA-4521)
+        import re
+        assert re.match(r"^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$", order.order_code)
         assert "#ORD-1" not in order.order_code
         decrypted = Order.decrypt_order_code(order.order_code)
         assert decrypted is not None
-        assert decrypted["bank"] == "TRU"
-        assert decrypted["days"] == "7D"
+        assert decrypted["order_id"] == order.id
         assert decrypted["user_id"] == "12345678"
 
     await engine.dispose()
@@ -459,5 +458,68 @@ async def test_ssn_deduplication_and_reputation_escalation():
         assert "❌ Закрыть в пользу магазина" in adm_texts
 
     await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_staff_chats_visibility_and_question_dispute_retention():
+    """Проверка видимости чатов клиентов для персонала и сохранения возможности диспута при вопросе"""
+    from bot.keyboards.inline import get_chats_list_kb, get_order_detail_kb
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with async_session() as session:
+        buyer = User(tg_id=1111, username="buyer1", balance=0.0, tron_address="T1", tron_private_key="k1")
+        session.add(buyer)
+        await session.flush()
+
+        # Заказ со статусом QUESTION и активным 24ч холдом
+        order = Order(
+            id=50,
+            user_id=buyer.tg_id,
+            amount=20.0,
+            status=OrderStatus.QUESTION,
+            hold_until=datetime.utcnow() + timedelta(hours=20),
+            admin_unread=True,
+            user_unread=False,
+            user=buyer
+        )
+        session.add(order)
+        await session.commit()
+        await session.refresh(order)
+
+        # 1. Для персонала список чатов показывает имя покупателя и белый кружок ⚪️!
+        kb_staff = get_chats_list_kb([order], is_staff=True)
+        staff_btn = kb_staff.inline_keyboard[0][0].text
+        assert "⚪️ " in staff_btn
+        assert "@buyer1" in staff_btn
+        assert "Вопрос" in staff_btn
+
+        # 2. Карточка заказа для покупателя при статусе QUESTION сохраняет кнопку диспута!
+        can_dispute = order.status in (OrderStatus.HOLD, OrderStatus.QUESTION) and order.hold_until > datetime.utcnow()
+        assert can_dispute is True
+        kb_detail = get_order_detail_kb(order, can_dispute=can_dispute)
+        detail_buttons = [b.text for row in kb_detail.inline_keyboard for b in row]
+        assert "⚠️ Открыть диспут" in detail_buttons
+        assert "💬 Чат вопроса по заказу" in detail_buttons
+
+    await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_dispute_chat_cannot_be_deleted_by_client():
+    """Проверка: клиент не имеет кнопки удаления чата диспута и не может его удалить"""
+    from bot.keyboards.inline import get_chat_view_kb
+    order = Order(id=99, user_id=123, status=OrderStatus.DISPUTED, has_dispute=True)
+    # Для покупателя (is_staff=False)
+    kb_client = get_chat_view_kb(order, is_staff=False)
+    client_buttons = [b.text for row in kb_client.inline_keyboard for b in row]
+    assert "🗑 Удалить чат" not in client_buttons
+
+    # Для администратора (is_staff=True)
+    kb_admin = get_chat_view_kb(order, is_staff=True)
+    admin_buttons = [b.text for row in kb_admin.inline_keyboard for b in row]
+    assert "🗑 Удалить чат" in admin_buttons
+
 
 

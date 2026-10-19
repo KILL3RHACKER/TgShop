@@ -43,6 +43,9 @@ class User(Base):
     rules_accepted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", index=True)
     rules_accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", index=True)
+    banned_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     orders: Mapped[list["Order"]] = relationship(back_populates="user", lazy="selectin")
 
@@ -130,6 +133,8 @@ class Account(Base):
         return self.product.subcategory_id if self.product else None
 
 ORDER_CIPHER_KEY = b"KRAKEN_2026_ORDER_KEY_SLA"
+ORDER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+ORDER_CODE_KEY = b"KRAKEN_2026_VOUCH"
 
 class Order(Base):
     __tablename__ = "orders"
@@ -203,58 +208,75 @@ class Order(Base):
     @property
     def order_code(self) -> str:
         """
-        ID заказа вида TRU-Days-Time-UserID, где блок Days-Time-UserID зашифрован.
-        Например: TRU-0C36605B...
+        ID заказа в стиле Kraken: XXXX-XXXX-XXXX-XXXX (например: LZAD-4234-YLPA-4521)
         """
-        bank = self.bank_code
-
-        # Days
-        if self.product and self.product.min_days is not None:
-            days_str = f"{self.product.min_days}D"
-        else:
-            full_title = f"{self.product.name if self.product else ''} {self.subcategory.name if self.subcategory else ''}"
-            m_days = re.search(r'(\d+)\s*(?:\+|D|Д|DAY)', full_title, re.IGNORECASE)
-            days_str = f"{m_days.group(1)}D" if m_days else "7D"
-
-        # Time
-        created = self.created_at or datetime.utcnow()
-        time_str = created.strftime("%H%M%S")
-
-        # UserID
-        user_id_str = str(self.user_id if self.user_id else 0)
-
-        # Исходный блок: Days-Time-UserID
-        plaintext = f"{days_str}-{time_str}-{user_id_str}"
-
-        # Шифрование в HEX
-        enc_bytes = bytes([b ^ ORDER_CIPHER_KEY[i % len(ORDER_CIPHER_KEY)] for i, b in enumerate(plaintext.encode("utf-8"))])
-        encrypted_payload = enc_bytes.hex().upper()
-
-        return f"{bank}-{encrypted_payload}"
+        oid = self.id if self.id is not None else 0
+        uid = self.user_id if self.user_id is not None else 0
+        return self.encode_order_code(oid, uid)
 
     @classmethod
-    def decrypt_order_code(cls, code: str) -> dict[str, str] | None:
+    def encode_order_code(cls, order_id: int, user_id: int) -> str:
+        import struct
+        uid_32 = user_id & 0xFFFFFFFF
+        chk = ((order_id * 31 + uid_32 * 17) & 0xFFFF)
+        payload = struct.pack(">IIH", order_id, uid_32, chk)
+        enc = bytes([b ^ ORDER_CODE_KEY[i % len(ORDER_CODE_KEY)] for i, b in enumerate(payload)])
+        num = int.from_bytes(enc, "big")
+        chars = []
+        for _ in range(16):
+            num, rem = divmod(num, 32)
+            chars.append(ORDER_CODE_ALPHABET[rem])
+        code_raw = "".join(reversed(chars))
+        return f"{code_raw[0:4]}-{code_raw[4:8]}-{code_raw[8:12]}-{code_raw[12:16]}"
+
+    @classmethod
+    def decrypt_order_code(cls, code: str) -> dict[str, any] | None:
         """
-        Расшифровывает ID заказа: TRU-{encrypted_payload}
-        Возвращает: {'bank': 'TRU', 'days': '7D', 'time': '113000', 'user_id': '12345678'}
+        Расшифровывает ID заказа: XXXX-XXXX-XXXX-XXXX
+        Возвращает: {'order_id': 42, 'user_id': '12345678', 'bank': 'TRU', 'days': '7D'}
+        Также поддерживает старый формат TRU-HEX для обратной совместимости.
         """
-        clean = code.lstrip("#")
-        if "-" not in clean:
-            return None
-        bank, enc = clean.split("-", 1)
-        try:
-            raw_bytes = bytes.fromhex(enc)
-            decrypted = bytes([b ^ ORDER_CIPHER_KEY[i % len(ORDER_CIPHER_KEY)] for i, b in enumerate(raw_bytes)]).decode("utf-8")
-            parts = decrypted.split("-")
-            if len(parts) >= 3:
-                return {
-                    "bank": bank,
-                    "days": parts[0],
-                    "time": parts[1],
-                    "user_id": parts[2]
-                }
-        except Exception:
-            pass
+        import struct
+        clean = code.strip().replace("-", "").replace(" ", "").upper()
+        if len(clean) == 16:
+            try:
+                num = 0
+                for c in clean:
+                    idx = ORDER_CODE_ALPHABET.find(c)
+                    if idx == -1:
+                        return None
+                    num = num * 32 + idx
+                enc = num.to_bytes(10, "big")
+                payload = bytes([b ^ ORDER_CODE_KEY[i % len(ORDER_CODE_KEY)] for i, b in enumerate(enc)])
+                order_id, uid_32, chk = struct.unpack(">IIH", payload)
+                expected_chk = ((order_id * 31 + uid_32 * 17) & 0xFFFF)
+                if chk == expected_chk:
+                    return {
+                        "order_id": order_id,
+                        "user_id": str(uid_32),
+                        "bank": "TRU",
+                        "days": "7D"
+                    }
+            except Exception:
+                pass
+
+        # Legacy fallback TRU-HEX...
+        clean_leg = code.lstrip("#")
+        if "-" in clean_leg:
+            bank, enc = clean_leg.split("-", 1)
+            try:
+                raw_bytes = bytes.fromhex(enc)
+                decrypted = bytes([b ^ ORDER_CIPHER_KEY[i % len(ORDER_CIPHER_KEY)] for i, b in enumerate(raw_bytes)]).decode("utf-8")
+                parts = decrypted.split("-")
+                if len(parts) >= 3:
+                    return {
+                        "bank": bank,
+                        "days": parts[0],
+                        "time": parts[1],
+                        "user_id": parts[2]
+                    }
+            except Exception:
+                pass
         return None
 
     messages: Mapped[list["DisputeMessage"]] = relationship(
@@ -304,3 +326,18 @@ class TopUpTicket(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime)
+
+class RestockSubscription(Base):
+    __tablename__ = "restock_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "subcategory_id", name="uq_restock_subscriptions_user_subcategory"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id"), index=True)
+    subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    user: Mapped["User"] = relationship(lazy="selectin")
+    subcategory: Mapped["Subcategory"] = relationship(lazy="selectin")
+

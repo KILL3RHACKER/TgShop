@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from bot.config import config
+from bot.database.base import async_session
 from bot.database.models import User, TopUpTicket, TicketStatus
 from bot.keyboards.inline import get_ticket_admin_kb
 
@@ -17,9 +18,9 @@ topup_router = Router()
 class TopUpStates(StatesGroup):
     amount = State()
 
-async def expire_ticket_timer(ticket_id: int, bot: Bot, session_pool):
+async def expire_ticket_timer(ticket_id: int, bot: Bot):
     await asyncio.sleep(config.ticket_expire_minutes * 60)
-    async with session_pool() as session:
+    async with async_session() as session:
         ticket = await session.get(TopUpTicket, ticket_id)
         if ticket and ticket.status == TicketStatus.PENDING:
             ticket.status = TicketStatus.EXPIRED
@@ -104,4 +105,4 @@ async def process_topup_amount(
         pass
 
     # Запуск таймера экспирации
-    asyncio.create_task(expire_ticket_timer(ticket.id, bot, session.bind))
+    asyncio.create_task(expire_ticket_timer(ticket.id, bot))
