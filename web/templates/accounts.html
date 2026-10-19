@@ -1,88 +1,99 @@
 {% extends "base.html" %}
 
-{% block title %}Управление аккаунтами{% endblock %}
+{% block title %}Склад и загрузка аккаунтов{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <!-- Header & Action Buttons -->
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+<div class="space-y-7">
+    <!-- MD3 Expressive Hero Header & Action Pills -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
         <div>
-            <h2 class="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
-                <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
-                <span>Склад аккаунтов (ST | NAME SURNAME | DD.MM)</span>
+            <div class="flex items-center space-x-2.5 mb-1.5">
+                <span class="px-3 py-1 rounded-full bg-md-primary-container text-md-on-primary-container text-xs font-bold uppercase tracking-wider">
+                    Инвентарь & Склад
+                </span>
+                <span class="text-xs text-md-outline">•</span>
+                <span class="text-xs text-md-on-surface-variant">SSN Key Deduplication</span>
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                Управление аккаунтами
             </h2>
-            <p class="text-sm text-slate-400 mt-0.5">Авто-сортировка по отлёжке 7+, 15+, 30+ дней, загрузка архивами ZIP / RAR</p>
+            <p class="text-xs sm:text-sm text-md-on-surface-variant mt-1 max-w-xl">
+                Авто-сортировка по тирам <b>7 Days</b>, <b>15 Days</b>, <b>30+ Days</b> и пакетная загрузка архивов
+            </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5">
-            <!-- Button: Sync Age Tiers -->
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Sync Age Tiers Pill -->
             <form method="POST" action="/accounts/sync-age" class="inline">
-                <button type="submit" title="Пересчитать возраст аккаунтов и перевести созревшие в 15+, 30+" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium rounded-xl transition-all shadow-sm">
-                    <i class="fa-solid fa-arrows-rotate text-indigo-400"></i>
-                    <span>Синхронизировать отлёжку</span>
+                <button type="submit" title="Пересчитать возраст аккаунтов и перевести созревшие в 15+, 30+" 
+                    class="m3-pressable inline-flex items-center space-x-2 px-5 py-3 rounded-full bg-md-surface-container hover:bg-md-surface-container-high text-md-on-surface border border-md-outline-variant/40 text-xs font-semibold shadow-sm transition-all">
+                    <i class="fa-solid fa-arrows-rotate text-md-primary"></i>
+                    <span>Синхронизировать возраст</span>
                 </button>
             </form>
 
-            <!-- Button: Upload Archive (ZIP / RAR) -->
-            <button onclick="openModal('zip-modal')" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/25 transition-all">
-                <i class="fa-solid fa-file-zipper"></i>
-                <span>Загрузить ZIP / RAR</span>
-            </button>
-
-            <!-- Button: Delete by List -->
-            <button onclick="openModal('delete-list-modal')" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-sm font-medium rounded-xl transition-all">
+            <!-- Delete by List Pill -->
+            <button onclick="openModal('delete-list-modal')" 
+                class="m3-pressable inline-flex items-center space-x-2 px-5 py-3 rounded-full bg-md-surface-container hover:bg-md-error-container/40 text-md-error border border-md-outline-variant/40 text-xs font-semibold transition-all">
                 <i class="fa-solid fa-trash-can"></i>
                 <span>Удалить по списку</span>
+            </button>
+
+            <!-- Primary FAB: Upload Archive (ZIP / RAR) -->
+            <button onclick="openModal('zip-modal')" 
+                class="m3-pressable inline-flex items-center space-x-2.5 px-6 py-3.5 rounded-full bg-md-primary hover:bg-md-primary/90 text-md-on-primary text-xs sm:text-sm font-bold shadow-lg shadow-md-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]">
+                <i class="fa-solid fa-cloud-arrow-up text-base"></i>
+                <span>Загрузить архивы</span>
             </button>
         </div>
     </div>
 
-    <!-- Inventory Stat Counters -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+    <!-- MD3 Expressive Stat Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+        <div class="rounded-[28px] bg-md-surface-container p-6 border border-md-outline-variant/30 flex items-center justify-between shadow-sm hover:border-md-primary/40 transition-all">
             <div>
-                <p class="text-xs uppercase font-semibold text-slate-400">Всего в базе</p>
-                <p class="text-xl font-bold text-white mt-1">{{ total_all }} шт.</p>
+                <p class="text-xs uppercase font-bold tracking-wider text-md-on-surface-variant">Всего в базе</p>
+                <p class="text-2xl sm:text-3xl font-black text-white mt-1">{{ total_all }} <span class="text-xs font-normal text-md-outline">шт.</span></p>
             </div>
-            <span class="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
+            <span class="w-12 h-12 rounded-2xl bg-md-surface-container-high text-md-on-surface-variant flex items-center justify-center text-lg border border-md-outline-variant/30 shadow-inner">
                 <i class="fa-solid fa-database"></i>
             </span>
         </div>
-        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+
+        <div class="rounded-[28px] bg-md-surface-container p-6 border border-md-outline-variant/30 flex items-center justify-between shadow-sm hover:border-emerald-500/40 transition-all">
             <div>
-                <p class="text-xs uppercase font-semibold text-emerald-400">В наличии (Свободно)</p>
-                <p class="text-xl font-bold text-emerald-400 mt-1">{{ total_available }} шт.</p>
+                <p class="text-xs uppercase font-bold tracking-wider text-emerald-400">В наличии (Свободно)</p>
+                <p class="text-2xl sm:text-3xl font-black text-emerald-400 mt-1">{{ total_available }} <span class="text-xs font-normal text-emerald-500/80">шт.</span></p>
             </div>
-            <span class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+            <span class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-lg border border-emerald-500/20 shadow-inner">
                 <i class="fa-solid fa-circle-check"></i>
             </span>
         </div>
-        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+
+        <div class="rounded-[28px] bg-md-surface-container p-6 border border-md-outline-variant/30 flex items-center justify-between shadow-sm hover:border-md-secondary/40 transition-all">
             <div>
-                <p class="text-xs uppercase font-semibold text-purple-400">Продано покупателям</p>
-                <p class="text-xl font-bold text-purple-400 mt-1">{{ total_sold }} шт.</p>
+                <p class="text-xs uppercase font-bold tracking-wider text-md-secondary">Продано покупателям</p>
+                <p class="text-2xl sm:text-3xl font-black text-md-secondary mt-1">{{ total_sold }} <span class="text-xs font-normal text-md-outline">шт.</span></p>
             </div>
-            <span class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+            <span class="w-12 h-12 rounded-2xl bg-md-secondary-container/50 text-md-secondary flex items-center justify-center text-lg border border-md-outline-variant/30 shadow-inner">
                 <i class="fa-solid fa-bag-shopping"></i>
             </span>
         </div>
     </div>
 
-    <!-- Filter & Search Bar -->
-    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-sm">
+    <!-- Filters & Search Toolbar -->
+    <div class="rounded-[24px] bg-md-surface-container p-4 border border-md-outline-variant/30 shadow-sm">
         <form method="GET" action="/accounts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <!-- Search Query -->
-            <div class="relative">
-                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
-                    <i class="fa-solid fa-magnifying-glass text-xs"></i>
-                </span>
-                <input type="text" name="q" value="{{ q }}" placeholder="Поиск (Штат, Имя, Дата)..."
-                    class="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <div class="lg:col-span-2 relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-md-outline text-xs"></i>
+                <input type="text" name="q" value="{{ q }}" placeholder="Поиск по имени, SSN, штату или дате..."
+                    class="w-full pl-10 pr-4 py-2.5 rounded-full bg-md-surface-container-high border border-md-outline-variant/40 text-xs text-white placeholder:text-md-outline focus:outline-none focus:ring-2 focus:ring-md-primary">
             </div>
 
             <!-- Product / Tier Filter -->
             <div>
-                <select name="product_id" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <select name="product_id" class="w-full px-4 py-2.5 rounded-full bg-md-surface-container-high border border-md-outline-variant/40 text-xs text-white focus:outline-none focus:ring-2 focus:ring-md-primary cursor-pointer">
                     <option value="">Все товары и тиры</option>
                     {% for p in products %}
                     <option value="{{ p.id }}" {% if selected_product_id == p.id %}selected{% endif %}>
@@ -92,9 +103,9 @@
                 </select>
             </div>
 
-            <!-- Age Filter -->
+            <!-- Age Tier Filter -->
             <div>
-                <select name="age_filter" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <select name="age_filter" class="w-full px-4 py-2.5 rounded-full bg-md-surface-container-high border border-md-outline-variant/40 text-xs text-white focus:outline-none focus:ring-2 focus:ring-md-primary cursor-pointer">
                     <option value="all" {% if age_filter == 'all' %}selected{% endif %}>Любая отлёжка</option>
                     <option value="7" {% if age_filter == '7' %}selected{% endif %}>Отлёжка 7+ (7-14 дн.)</option>
                     <option value="15" {% if age_filter == '15' %}selected{% endif %}>Отлёжка 15+ (15-29 дн.)</option>
@@ -102,145 +113,152 @@
                 </select>
             </div>
 
-            <!-- Status Filter -->
-            <div>
-                <select name="status_filter" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Все статусы</option>
-                    <option value="available" {% if status_filter == 'available' %}selected{% endif %}>Только в наличии</option>
-                    <option value="sold" {% if status_filter == 'sold' %}selected{% endif %}>Только проданные</option>
-                </select>
-            </div>
-
-            <!-- Submit / Reset Buttons -->
+            <!-- Status Filter & Submit -->
             <div class="flex items-center space-x-2">
-                <button type="submit" class="flex-1 py-2 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium border border-slate-700 transition-colors flex items-center justify-center space-x-1.5">
-                    <i class="fa-solid fa-filter text-xs"></i>
-                    <span>Фильтр</span>
+                <select name="status_filter" class="flex-1 px-4 py-2.5 rounded-full bg-md-surface-container-high border border-md-outline-variant/40 text-xs text-white focus:outline-none focus:ring-2 focus:ring-md-primary cursor-pointer">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Все статусы</option>
+                    <option value="available" {% if status_filter == 'available' %}selected{% endif %}>В наличии</option>
+                    <option value="sold" {% if status_filter == 'sold' %}selected{% endif %}>Проданные</option>
+                </select>
+                <button type="submit" class="px-5 py-2.5 rounded-full bg-md-primary-container text-md-on-primary-container hover:bg-md-primary hover:text-md-on-primary font-bold text-xs transition-colors flex items-center justify-center space-x-1.5 shadow-sm">
+                    <i class="fa-solid fa-filter text-[10px]"></i>
+                    <span>Найти</span>
                 </button>
-                <a href="/accounts" title="Сбросить" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl border border-slate-700 text-sm">
-                    <i class="fa-solid fa-rotate-left"></i>
-                </a>
             </div>
         </form>
     </div>
 
-    <!-- Bulk Action Bar -->
-    <form id="bulk-delete-form" method="POST" action="/accounts/delete-bulk">
-        <div id="bulk-actions" class="hidden mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 flex items-center justify-between">
-            <div class="flex items-center space-x-3 text-rose-200 text-sm font-medium">
-                <i class="fa-solid fa-check-double text-rose-400"></i>
-                <span>Выбрано элементов: <b id="selected-count">0</b></span>
+    <!-- Bulk Selection Form & Table -->
+    <form id="bulk-delete-form" method="POST" action="/accounts/bulk-delete">
+        {% if selected_product_id %}
+        <input type="hidden" name="product_id" value="{{ selected_product_id }}">
+        {% endif %}
+
+        <!-- Floating Multi-select Bar -->
+        <div id="bulk-actions" class="hidden mb-4 p-3.5 px-5 rounded-full bg-md-error-container text-md-on-error-container border border-md-error flex items-center justify-between shadow-xl animate-bounce">
+            <div class="flex items-center space-x-3 text-xs font-bold">
+                <i class="fa-solid fa-check-double text-base"></i>
+                <span>Выбрано элементов: <b id="selected-count" class="font-black text-sm">0</b></span>
             </div>
-            <button type="submit" onclick="return confirm('Вы действительно хотите удалить выбранные аккаунты?')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg shadow transition-colors flex items-center space-x-1.5">
-                <i class="fa-solid fa-trash"></i>
+            <button type="submit" onclick="return confirm('Вы действительно хотите удалить выбранные аккаунты?')" 
+                class="px-4 py-2 bg-md-error text-md-on-error hover:bg-white hover:text-red-900 text-xs font-bold rounded-full shadow transition-all flex items-center space-x-1.5">
+                <i class="fa-solid fa-trash text-xs"></i>
                 <span>Удалить выбранные</span>
             </button>
         </div>
 
-        <!-- Table Listing Accounts -->
-        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+        <!-- MD3 Expressive Accounts Table -->
+        <div class="rounded-[28px] bg-md-surface-container border border-md-outline-variant/30 overflow-hidden shadow-sm">
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
                     <thead>
-                        <tr class="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 bg-slate-950/50">
-                            <th class="py-3 px-3 w-8 text-center">
-                                <input type="checkbox" id="select-all" class="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer">
+                        <tr class="border-b border-md-outline-variant/40 text-[11px] font-bold uppercase tracking-wider text-md-on-surface-variant bg-md-surface-container-high/60">
+                            <th class="py-3.5 px-3 w-8 text-center">
+                                <input type="checkbox" id="select-all" class="rounded bg-md-surface-container-lowest border-md-outline text-md-primary focus:ring-0 cursor-pointer">
                             </th>
-                            <th class="py-3 px-3">ID</th>
-                            <th class="py-3 px-3">Штат (ST)</th>
-                            <th class="py-3 px-3">Имя Фамилия</th>
-                            <th class="py-3 px-3 text-amber-400">SSN</th>
-                            <th class="py-3 px-3">Дата (DD.MM)</th>
-                            <th class="py-3 px-3">Отлёжка (Дней)</th>
-                            <th class="py-3 px-3">Товар / Тир</th>
-                            <th class="py-3 px-3">Статус</th>
-                            <th class="py-3 px-3">Покупатель</th>
-                            <th class="py-3 px-3">Добавлен</th>
-                            <th class="py-3 px-3 text-right">Действия</th>
+                            <th class="py-3.5 px-3 font-mono">ID</th>
+                            <th class="py-3.5 px-3">Штат</th>
+                            <th class="py-3.5 px-3">Имя Фамилия</th>
+                            <th class="py-3.5 px-3 font-mono text-md-tertiary">SSN</th>
+                            <th class="py-3.5 px-3">Дата (DD.MM)</th>
+                            <th class="py-3.5 px-3">Отлёжка</th>
+                            <th class="py-3.5 px-3">Товар / Тир</th>
+                            <th class="py-3.5 px-3">Статус</th>
+                            <th class="py-3.5 px-3">Покупатель</th>
+                            <th class="py-3.5 px-3">Добавлен</th>
+                            <th class="py-3.5 px-3 text-right">Действия</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-800/60 text-slate-300">
+                    <tbody class="divide-y divide-md-outline-variant/20 text-md-on-surface">
                         {% if accounts %}
                             {% for acc in accounts %}
                             {% set age = acc.age_days %}
-                            <tr class="hover:bg-slate-800/40 transition-colors">
+                            <tr class="hover:bg-md-surface-container-high/40 transition-colors">
                                 <td class="py-3 px-3 text-center">
-                                    <input type="checkbox" name="account_ids" value="{{ acc.id }}" class="account-checkbox rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-0 cursor-pointer">
+                                    <input type="checkbox" name="account_ids" value="{{ acc.id }}" class="account-checkbox rounded bg-md-surface-container-lowest border-md-outline text-md-primary focus:ring-0 cursor-pointer">
                                 </td>
-                                <td class="py-3 px-3 font-mono text-xs text-slate-500">#{{ acc.id }}</td>
-                                <td class="py-3 px-3 font-mono font-bold text-indigo-400">
-                                    <span class="px-2 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/50">
+                                <td class="py-3 px-3 font-mono text-xs text-md-outline">#{{ acc.id }}</td>
+                                <td class="py-3 px-3 font-mono font-bold text-md-primary">
+                                    <span class="px-2.5 py-1 rounded-full bg-md-primary-container text-md-on-primary-container text-xs">
                                         {{ acc.state }}
                                     </span>
                                 </td>
-                                <td class="py-3 px-3 font-semibold text-slate-100">
+                                <td class="py-3 px-3 font-bold text-white">
                                     {{ acc.name }}
                                 </td>
-                                <td class="py-3 px-3 font-mono text-xs text-amber-400 font-semibold">
+                                <td class="py-3 px-3 font-mono text-xs text-md-tertiary font-bold tracking-wider">
                                     {{ acc.ssn if acc.ssn else '—' }}
                                 </td>
-                                <td class="py-3 px-3 font-mono text-xs text-slate-300">
+                                <td class="py-3 px-3 font-mono text-xs text-md-on-surface-variant">
                                     {{ acc.date_info }}
                                 </td>
                                 <td class="py-3 px-3 text-xs">
                                     {% if age >= 30 %}
-                                    <span class="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+                                    <span class="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
                                         {{ age }} дн. (30+)
                                     </span>
                                     {% elif age >= 15 %}
-                                    <span class="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">
+                                    <span class="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold">
                                         {{ age }} дн. (15+)
                                     </span>
                                     {% elif age >= 7 %}
-                                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                                    <span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
                                         {{ age }} дн. (7+)
                                     </span>
                                     {% else %}
-                                    <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                                    <span class="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
                                         {{ age }} дн.
                                     </span>
                                     {% endif %}
                                 </td>
-                                <td class="py-3 px-3 font-medium text-white">
-                                    <span class="inline-block px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-xs border border-slate-700">
+                                <td class="py-3 px-3 font-semibold text-xs text-white">
+                                    <span class="inline-block px-3 py-1 rounded-full bg-md-surface-container-high text-md-on-surface text-xs border border-md-outline-variant/30">
                                         {{ acc.product.name if acc.product else 'Товар #' ~ acc.product_id }}
                                     </span>
                                 </td>
                                 <td class="py-3 px-3 text-xs">
                                     {% if acc.is_sold %}
-                                    <span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium">
+                                    <span class="px-3 py-1 rounded-full bg-md-surface-container-lowest text-md-outline border border-md-outline-variant/30 font-medium">
                                         Продан
                                     </span>
                                     {% else %}
-                                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold">
-                                        Доступен
+                                    <span class="px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                                        В наличии
                                     </span>
                                     {% endif %}
                                 </td>
                                 <td class="py-3 px-3 text-xs font-mono">
                                     {% if acc.sold_to_user_id %}
-                                    <a href="/users?q={{ acc.sold_to_user_id }}" class="text-indigo-400 hover:underline">
+                                    <a href="/users?q={{ acc.sold_to_user_id }}" class="text-md-primary hover:underline font-bold">
                                         {{ acc.sold_to_user_id }}
                                     </a>
                                     {% else %}
-                                    <span class="text-slate-600">—</span>
+                                    <span class="text-md-outline">—</span>
                                     {% endif %}
                                 </td>
-                                <td class="py-3 px-3 text-xs text-slate-400">
+                                <td class="py-3 px-3 text-xs text-md-on-surface-variant font-medium">
                                     {{ acc.created_at | dt }}
                                 </td>
                                 <td class="py-3 px-3 text-right">
                                     <div class="flex items-center justify-end space-x-1.5">
-                                        <button type="button" onclick='showAccountData({{ acc.id }}, "Info: {{ acc.name }}", {{ (acc.raw_data or acc.data or "") | tojson }})' title="Быстрый просмотр Info" class="px-2 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg border border-indigo-500/30 text-[11px] font-medium transition-colors flex items-center space-x-1">
+                                        <!-- Quick View: Info -->
+                                        <button type="button" onclick='showAccountData({{ acc.id }}, "Инфо: {{ acc.name }}", {{ (acc.raw_data or acc.data or "") | tojson }})' title="Быстрый просмотр Info" 
+                                            class="m3-pressable px-3 py-1.5 rounded-full bg-md-surface-container-high hover:bg-md-primary hover:text-md-on-primary text-md-on-surface text-xs font-semibold border border-md-outline-variant/40 transition-colors flex items-center space-x-1">
                                             <i class="fa-solid fa-file-lines text-[10px]"></i>
                                             <span>Info</span>
                                         </button>
-                                        <button type="button" onclick='showAccountData({{ acc.id }}, "Cookies: {{ acc.name }}", {{ (acc.cookie_data or "Cookies отсутствуют") | tojson }})' title="Быстрый просмотр Cookies" class="px-2 py-1 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white rounded-lg border border-amber-500/30 text-[11px] font-medium transition-colors flex items-center space-x-1">
+
+                                        <!-- Quick View: Cookie -->
+                                        <button type="button" onclick='showAccountData({{ acc.id }}, "Cookies: {{ acc.name }}", {{ (acc.cookie_data or "Cookies отсутствуют") | tojson }})' title="Быстрый просмотр Cookies" 
+                                            class="m3-pressable px-3 py-1.5 rounded-full bg-md-surface-container-high hover:bg-md-tertiary hover:text-md-on-tertiary text-md-on-surface text-xs font-semibold border border-md-outline-variant/40 transition-colors flex items-center space-x-1">
                                             <i class="fa-solid fa-cookie text-[10px]"></i>
                                             <span>Cookie</span>
                                         </button>
-                                        <button type="button" onclick="deleteSingleAccount({{ acc.id }})" title="Удалить" class="text-slate-500 hover:text-rose-400 p-1 transition-colors">
-                                            <i class="fa-solid fa-trash-can text-sm"></i>
+
+                                        <!-- Delete Single -->
+                                        <button type="button" onclick="deleteSingleAccount({{ acc.id }})" title="Удалить" 
+                                            class="m3-pressable w-8 h-8 rounded-full hover:bg-md-error-container text-md-outline hover:text-md-error flex items-center justify-center transition-colors">
+                                            <i class="fa-solid fa-trash-can text-xs"></i>
                                         </button>
                                     </div>
                                 </td>
@@ -248,8 +266,9 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="11" class="py-8 text-center text-slate-500 text-sm">
-                                    Аккаунтов не найдено. Воспользуйтесь кнопками выше для загрузки архива.
+                                <td colspan="12" class="py-12 text-center text-md-on-surface-variant text-sm font-medium">
+                                    <i class="fa-solid fa-box-open text-3xl mb-2 text-md-outline block"></i>
+                                    Аккаунтов не найдено. Нажмите «Загрузить архивы» выше для добавления.
                                 </td>
                             </tr>
                         {% endif %}
@@ -257,18 +276,20 @@
                 </table>
             </div>
 
-            <!-- Pagination Bar -->
+            <!-- MD3 Pagination Bar -->
             {% if total_pages > 1 %}
-            <div class="p-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <div class="p-4 px-6 border-t border-md-outline-variant/30 flex items-center justify-between text-xs text-md-on-surface-variant font-medium">
                 <span>Страница <b>{{ page }}</b> из <b>{{ total_pages }}</b> (Всего: {{ total_matching }})</span>
-                <div class="flex items-center space-x-1.5">
+                <div class="flex items-center space-x-2">
                     {% if page > 1 %}
-                    <a href="/accounts?page={{ page - 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&age_filter={{ age_filter }}&status_filter={{ status_filter }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
+                    <a href="/accounts?page={{ page - 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&age_filter={{ age_filter }}&status_filter={{ status_filter }}" 
+                        class="px-4 py-2 rounded-full bg-md-surface-container-high hover:bg-md-primary hover:text-md-on-primary text-white transition-colors">
                         &larr; Назад
                     </a>
                     {% endif %}
                     {% if page < total_pages %}
-                    <a href="/accounts?page={{ page + 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&age_filter={{ age_filter }}&status_filter={{ status_filter }}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">
+                    <a href="/accounts?page={{ page + 1 }}&q={{ q }}&product_id={{ selected_product_id or '' }}&age_filter={{ age_filter }}&status_filter={{ status_filter }}" 
+                        class="px-4 py-2 rounded-full bg-md-surface-container-high hover:bg-md-primary hover:text-md-on-primary text-white transition-colors">
                         Вперед &rarr;
                     </a>
                     {% endif %}
@@ -279,97 +300,100 @@
     </form>
 </div>
 
-<!-- ================= MODAL: ARCHIVE UPLOAD (ZIP / RAR) ================= -->
-<div id="zip-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md hidden transition-all">
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl p-6 sm:p-7 shadow-2xl relative flex flex-col">
-        <button onclick="closeModal('zip-modal')" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
+<!-- ================= MD3 EXPRESSIVE DIALOG: ARCHIVE UPLOAD ================= -->
+<div id="zip-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden transition-all">
+    <div class="rounded-[32px] bg-md-surface-container-high border border-md-outline-variant/60 w-full max-w-xl p-6 sm:p-8 shadow-2xl relative flex flex-col">
+        <button onclick="closeModal('zip-modal')" class="absolute top-6 right-6 w-9 h-9 rounded-full bg-md-surface-container hover:bg-md-surface-container-highest text-md-outline hover:text-white flex items-center justify-center transition-colors">
             <i class="fa-solid fa-xmark text-sm"></i>
         </button>
 
-        <div class="flex items-center space-x-3 mb-2">
-            <span class="w-10 h-10 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center text-lg shadow-inner">
+        <div class="flex items-center space-x-3.5 mb-2">
+            <span class="w-12 h-12 rounded-2xl bg-md-primary-container text-md-on-primary-container flex items-center justify-center text-xl shadow-md border border-md-outline-variant/30">
                 <i class="fa-solid fa-cloud-arrow-up"></i>
             </span>
             <div>
-                <h3 class="text-lg font-bold text-white leading-tight">Загрузка аккаунтов</h3>
-                <p class="text-xs text-slate-400">Автоматическая сортировка по тирам и проверка на дубли</p>
+                <h3 class="text-xl font-black text-white leading-tight">Загрузка архивов</h3>
+                <p class="text-xs text-md-on-surface-variant font-medium">Авто-сортировка по тирам и дедупликация по SSN</p>
             </div>
         </div>
 
-        <form id="archive-upload-form" method="POST" action="/accounts/upload-archive" enctype="multipart/form-data" class="space-y-4 mt-3" onsubmit="handleUploadSubmit(event)">
-            <!-- Category (Bank) Selection -->
+        <form id="archive-upload-form" method="POST" action="/accounts/upload-archive" enctype="multipart/form-data" class="space-y-4 mt-4" onsubmit="handleUploadSubmit(event)">
+            <!-- 1. Category (Bank) Selector -->
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                    <span>1. Выберите банк (Категорию) *</span>
+                <label class="block text-xs font-bold text-md-on-surface uppercase tracking-wider mb-2">
+                    1. Выберите банк (Категорию) *
                 </label>
                 <div class="relative">
-                    <select name="category_id" id="upload-category-id" required class="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none font-medium cursor-pointer">
+                    <select name="category_id" id="upload-category-id" required 
+                        class="w-full px-5 py-3.5 rounded-2xl bg-md-surface-container-lowest border border-md-outline-variant/50 text-sm text-white focus:outline-none focus:ring-2 focus:ring-md-primary appearance-none font-semibold cursor-pointer">
                         {% for cat in categories %}
                         <option value="{{ cat.id }}">
                             📁 {{ cat.name }}
                         </option>
                         {% endfor %}
                     </select>
-                    <i class="fa-solid fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none text-xs"></i>
+                    <i class="fa-solid fa-chevron-down absolute right-5 top-1/2 -translate-y-1/2 text-md-outline pointer-events-none text-xs"></i>
                 </div>
-                <div class="flex items-center space-x-2 mt-1.5 text-[11px] text-slate-500">
-                    <i class="fa-solid fa-circle-check text-emerald-400/80"></i>
+                <div class="flex items-center space-x-2 mt-2 text-xs text-md-on-surface-variant">
+                    <i class="fa-solid fa-circle-check text-emerald-400"></i>
                     <span>Тиры <b>7 Days</b>, <b>15 Days</b>, <b>30+ Days</b> сформируются автоматически</span>
                 </div>
             </div>
 
-            <!-- Drag & Drop Zone -->
+            <!-- 2. MD3 Interactive Drag & Drop Dropzone -->
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    <span>2. Выберите или перетащите архивы (.zip, .rar) *</span>
+                <label class="block text-xs font-bold text-md-on-surface uppercase tracking-wider mb-2">
+                    2. Перетащите архивы (.zip, .rar) *
                 </label>
                 
                 <input type="file" id="archive_files" name="archive_files" multiple accept=".zip,.rar" class="hidden" onchange="handleFileSelect(this)">
                 
                 <div id="dropzone" onclick="document.getElementById('archive_files').click()"
-                    class="border-2 border-dashed border-slate-700 hover:border-indigo-500/80 bg-slate-950/60 hover:bg-indigo-950/15 rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 group relative">
+                    class="rounded-[28px] border-2 border-dashed border-md-outline hover:border-md-primary bg-md-surface-container-lowest/80 hover:bg-md-surface-container-lowest p-7 text-center cursor-pointer transition-all duration-200 group relative">
                     <div class="flex flex-col items-center justify-center pointer-events-none">
-                        <div class="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-indigo-400 group-hover:text-indigo-300 group-hover:scale-110 transition-all mb-2.5">
-                            <i class="fa-solid fa-file-zipper text-xl"></i>
+                        <div class="w-14 h-14 rounded-2xl bg-md-surface-container border border-md-outline-variant/40 flex items-center justify-center text-md-primary group-hover:scale-110 transition-transform mb-3 shadow-inner">
+                            <i class="fa-solid fa-file-zipper text-2xl"></i>
                         </div>
-                        <p class="text-sm font-semibold text-slate-200 group-hover:text-white">
+                        <p class="text-sm font-bold text-white">
                             Нажмите или перетащите архивы сюда
                         </p>
-                        <p class="text-xs text-slate-500 mt-1">
-                            Поддерживаются <b>.zip</b>, <b>.rar</b> (папки с логами, вложенные архивы, cookies)
+                        <p class="text-xs text-md-on-surface-variant mt-1 max-w-sm">
+                            Поддерживаются <b>.zip</b>, <b>.rar</b> (логи, вложенные архивы, сопутствующие cookies)
                         </p>
                     </div>
                 </div>
 
-                <!-- Selected Files List -->
-                <div id="selected-files-container" class="mt-2.5 space-y-1.5 max-h-40 overflow-y-auto hidden pr-1"></div>
+                <!-- Dynamic Selected Files List -->
+                <div id="selected-files-container" class="mt-3 space-y-2 max-h-40 overflow-y-auto hidden pr-1"></div>
             </div>
 
             <!-- SSN Deduplication Notice -->
-            <div class="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 flex items-start space-x-2.5">
-                <i class="fa-solid fa-fingerprint text-amber-400 text-sm mt-0.5"></i>
+            <div class="p-3.5 rounded-2xl bg-md-surface-container border border-md-outline-variant/40 text-xs text-md-on-surface-variant flex items-start space-x-3">
+                <i class="fa-solid fa-fingerprint text-md-tertiary text-lg mt-0.5"></i>
                 <div class="leading-relaxed">
-                    <b class="text-slate-200">Умная дедупликация по SSN:</b> Система сверяет Social Security Number каждого аккаунта с базой. Повторные логи одного клиента будут отсеяны.
+                    <b class="text-white">Главный ключ — SSN:</b> Система автоматически извлекает Social Security Number каждого аккаунта. Повторные логи исключаются.
                 </div>
             </div>
 
-            <!-- Action Buttons & Progress -->
+            <!-- Action & Progress Footer -->
             <div class="pt-2">
                 <div id="upload-progress-box" class="hidden mb-3">
-                    <div class="flex items-center justify-between text-xs text-indigo-400 font-medium mb-1">
-                        <span>Распаковка и дедупликация базы...</span>
+                    <div class="flex items-center justify-between text-xs text-md-primary font-bold mb-1.5">
+                        <span>Распаковка архивов и дедупликация...</span>
                         <i class="fa-solid fa-circle-notch fa-spin"></i>
                     </div>
-                    <div class="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                        <div class="bg-indigo-500 h-1.5 rounded-full animate-pulse w-full"></div>
+                    <div class="w-full bg-md-surface-container-lowest rounded-full h-2 overflow-hidden border border-md-outline-variant/40">
+                        <div class="bg-md-primary h-2 rounded-full animate-pulse w-full"></div>
                     </div>
                 </div>
 
-                <div class="flex items-center justify-end space-x-2.5">
-                    <button type="button" onclick="closeModal('zip-modal')" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl transition-colors">
+                <div class="flex items-center justify-end space-x-3">
+                    <button type="button" onclick="closeModal('zip-modal')" 
+                        class="m3-pressable px-5 py-3 rounded-full bg-md-surface-container hover:bg-md-surface-container-highest text-md-on-surface text-xs font-bold transition-colors">
                         Отмена
                     </button>
-                    <button type="submit" id="upload-submit-btn" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center space-x-2">
+                    <button type="submit" id="upload-submit-btn" 
+                        class="m3-pressable px-6 py-3.5 rounded-full bg-md-primary hover:bg-md-primary/90 text-md-on-primary text-xs font-bold shadow-lg shadow-md-primary/20 transition-all flex items-center space-x-2">
                         <i class="fa-solid fa-bolt"></i>
                         <span>Распаковать и добавить</span>
                     </button>
@@ -380,21 +404,24 @@
 </div>
 
 <!-- ================= MODAL: DELETE BY LIST ================= -->
-<div id="delete-list-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
-        <button onclick="closeModal('delete-list-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
-            <i class="fa-solid fa-xmark text-lg"></i>
+<div id="delete-list-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden transition-all">
+    <div class="rounded-[32px] bg-md-surface-container-high border border-md-outline-variant/60 w-full max-w-lg p-6 sm:p-8 shadow-2xl relative">
+        <button onclick="closeModal('delete-list-modal')" class="absolute top-6 right-6 w-9 h-9 rounded-full bg-md-surface-container hover:bg-md-surface-container-highest text-md-outline hover:text-white flex items-center justify-center transition-colors">
+            <i class="fa-solid fa-xmark text-sm"></i>
         </button>
-        <h3 class="text-lg font-bold text-white flex items-center space-x-2 mb-1">
-            <i class="fa-solid fa-trash-can text-rose-400"></i>
+
+        <h3 class="text-xl font-black text-white flex items-center space-x-2.5 mb-1.5">
+            <i class="fa-solid fa-trash-can text-md-error"></i>
             <span>Удаление по списку</span>
         </h3>
-        <p class="text-xs text-slate-400 mb-4">Вставьте список аккаунтов (по одному на строку в формате <code>ST | NAME SURNAME | DD.MM</code> или <code>NAME SURNAME, DD.MM</code>). Будут удалены только еще не проданные аккаунты.</p>
+        <p class="text-xs text-md-on-surface-variant mb-4">
+            Вставьте строки в формате <code>ST | NAME SURNAME | DD.MM</code>. Будут удалены только непроданные записи.
+        </p>
 
         <form method="POST" action="/accounts/delete-list" class="space-y-4">
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Фильтр по товару (необязательно)</label>
-                <select name="product_id" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:ring-2 focus:ring-rose-500">
+                <label class="block text-xs font-bold text-md-on-surface uppercase tracking-wider mb-2">Фильтр по товару (необязательно)</label>
+                <select name="product_id" class="w-full px-5 py-3.5 rounded-2xl bg-md-surface-container-lowest border border-md-outline-variant/50 text-xs text-white focus:outline-none focus:ring-2 focus:ring-md-primary">
                     <option value="">Все товары</option>
                     {% for p in products %}
                     <option value="{{ p.id }}">{{ p.subcategory.name if p.subcategory else '' }} &rarr; {{ p.name }}</option>
@@ -403,20 +430,50 @@
             </div>
 
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Список для удаления *</label>
-                <textarea name="list_data" rows="8" required placeholder="CA | JOHN DOE | 15.04&#10;NY | MICHAEL SMITH | 22.11"
-                    class="w-full p-3 font-mono text-xs rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500"></textarea>
+                <label class="block text-xs font-bold text-md-on-surface uppercase tracking-wider mb-2">Список строк для удаления *</label>
+                <textarea name="list_data" rows="7" required placeholder="CA | JOHN DOE | 15.04&#10;NY | MICHAEL SMITH | 22.11"
+                    class="w-full p-4 font-mono text-xs rounded-2xl bg-md-surface-container-lowest border border-md-outline-variant/50 text-white placeholder:text-md-outline focus:outline-none focus:ring-2 focus:ring-md-error"></textarea>
             </div>
 
-            <div class="pt-2 flex justify-end space-x-2">
-                <button type="button" onclick="closeModal('delete-list-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl">
+            <div class="pt-2 flex justify-end space-x-3">
+                <button type="button" onclick="closeModal('delete-list-modal')" class="m3-pressable px-5 py-3 rounded-full bg-md-surface-container hover:bg-md-surface-container-highest text-md-on-surface text-xs font-bold">
                     Отмена
                 </button>
-                <button type="submit" onclick="return confirm('Вы уверены, что хотите удалить совпадающие аккаунты?')" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-rose-600/30">
+                <button type="submit" onclick="return confirm('Вы уверены, что хотите удалить совпадающие аккаунты?')" 
+                    class="m3-pressable px-6 py-3 rounded-full bg-md-error text-md-on-error font-bold text-xs shadow-lg shadow-md-error/20">
                     Найти и удалить
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- ================= MD3 EXPRESSIVE DIALOG: QUICK VIEW INFO / COOKIE ================= -->
+<div id="quick-view-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md hidden transition-all">
+    <div class="rounded-[32px] bg-md-surface-container-high border border-md-outline-variant/60 w-full max-w-2xl p-6 sm:p-8 shadow-2xl relative flex flex-col max-h-[85vh]">
+        <button onclick="closeModal('quick-view-modal')" class="absolute top-6 right-6 w-9 h-9 rounded-full bg-md-surface-container hover:bg-md-surface-container-highest text-md-outline hover:text-white flex items-center justify-center transition-colors">
+            <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+        <h3 class="text-lg font-black text-white flex items-center space-x-2.5 mb-3" id="quick-modal-title">
+            <i class="fa-solid fa-file-lines text-md-primary"></i>
+            <span>Просмотр данных</span>
+        </h3>
+        <div class="flex-1 overflow-y-auto bg-md-surface-container-lowest p-5 rounded-2xl border border-md-outline-variant/40 font-mono text-xs text-slate-200 whitespace-pre-wrap selection:bg-md-primary selection:text-md-on-primary select-all" id="quick-modal-body">
+        </div>
+        <div class="pt-4 flex justify-between items-center border-t border-md-outline-variant/30 mt-3">
+            <span class="text-xs text-md-on-surface-variant font-medium" id="quick-modal-len"></span>
+            <div class="flex items-center space-x-2.5">
+                <button type="button" onclick="copyQuickViewContent()" id="copy-quick-btn" 
+                    class="m3-pressable px-5 py-2.5 bg-md-primary hover:bg-md-primary/90 text-md-on-primary text-xs font-bold rounded-full flex items-center space-x-1.5 transition-colors shadow-md">
+                    <i class="fa-solid fa-copy"></i>
+                    <span>Скопировать</span>
+                </button>
+                <button type="button" onclick="closeModal('quick-view-modal')" 
+                    class="m3-pressable px-5 py-2.5 bg-md-surface-container hover:bg-md-surface-container-highest text-md-on-surface text-xs font-semibold rounded-full transition-colors">
+                    Закрыть
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -427,33 +484,6 @@
     <input type="hidden" name="product_id" value="{{ selected_product_id }}">
     {% endif %}
 </form>
-
-<!-- Modal: Quick View Account Info / Cookie -->
-<div id="quick-view-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative flex flex-col max-h-[85vh]">
-        <button onclick="closeModal('quick-view-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-white">
-            <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-        <h3 class="text-base font-bold text-white flex items-center space-x-2 mb-3" id="quick-modal-title">
-            <i class="fa-solid fa-file-lines text-indigo-400"></i>
-            <span>Просмотр данных</span>
-        </h3>
-        <div class="flex-1 overflow-y-auto bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs text-slate-200 whitespace-pre-wrap selection:bg-indigo-600 select-all" id="quick-modal-body">
-        </div>
-        <div class="pt-3.5 flex justify-between items-center border-t border-slate-800/80 mt-2">
-            <span class="text-xs text-slate-500" id="quick-modal-len"></span>
-            <div class="flex items-center space-x-2">
-                <button type="button" onclick="copyQuickViewContent()" id="copy-quick-btn" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-colors">
-                    <i class="fa-solid fa-copy"></i>
-                    <span>Скопировать</span>
-                </button>
-                <button type="button" onclick="closeModal('quick-view-modal')" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl transition-colors">
-                    Закрыть
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -462,12 +492,12 @@
 
     function showAccountData(id, title, content) {
         currentQuickContent = content || "";
-        document.getElementById('quick-modal-title').innerHTML = '<i class="fa-solid fa-eye text-indigo-400 mr-2"></i>' + title;
+        document.getElementById('quick-modal-title').innerHTML = '<i class="fa-solid fa-eye text-md-primary mr-2"></i>' + title;
         document.getElementById('quick-modal-body').textContent = currentQuickContent;
         document.getElementById('quick-modal-len').textContent = 'Символов: ' + currentQuickContent.length;
         const copyBtn = document.getElementById('copy-quick-btn');
         copyBtn.innerHTML = '<i class="fa-solid fa-copy"></i><span>Скопировать</span>';
-        copyBtn.className = "px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-colors";
+        copyBtn.className = "m3-pressable px-5 py-2.5 bg-md-primary hover:bg-md-primary/90 text-md-on-primary text-xs font-bold rounded-full flex items-center space-x-1.5 transition-colors shadow-md";
         openModal('quick-view-modal');
     }
 
@@ -475,10 +505,11 @@
         if (!currentQuickContent) return;
         navigator.clipboard.writeText(currentQuickContent).then(() => {
             const copyBtn = document.getElementById('copy-quick-btn');
-            copyBtn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i><span>Скопировано!</span>';
-            copyBtn.className = "px-3.5 py-1.5 bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-colors";
+            copyBtn.innerHTML = '<i class="fa-solid fa-check text-emerald-300"></i><span>Скопировано!</span>';
+            copyBtn.className = "m3-pressable px-5 py-2.5 bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 text-xs font-bold rounded-full flex items-center space-x-1.5 transition-colors";
         });
     }
+
     function deleteSingleAccount(id) {
         if (confirm('Удалить аккаунт #' + id + '?')) {
             document.getElementById('single-delete-id').value = id;
@@ -518,7 +549,7 @@
         cb.addEventListener('change', updateBulkBar);
     });
 
-    // Drag-and-Drop & File Queue Management
+    // MD3 Drag-and-Drop & Dynamic File Queue
     let uploadFilesDt = new DataTransfer();
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('archive_files');
@@ -545,14 +576,16 @@
         filesContainer.classList.remove('hidden');
         Array.from(uploadFilesDt.files).forEach((file, index) => {
             const chip = document.createElement('div');
-            chip.className = 'flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 animate-fadeIn';
+            chip.className = 'flex items-center justify-between p-3 rounded-2xl bg-md-surface-container-lowest border border-md-outline-variant/40 text-xs text-white';
             chip.innerHTML = `
-                <div class="flex items-center space-x-2 truncate pr-2">
-                    <i class="fa-solid fa-file-zipper text-indigo-400 text-sm"></i>
-                    <span class="truncate font-medium">${file.name}</span>
-                    <span class="text-[11px] text-slate-500 font-mono">(${formatBytes(file.size)})</span>
+                <div class="flex items-center space-x-2.5 truncate pr-2">
+                    <span class="w-8 h-8 rounded-full bg-md-secondary-container text-md-on-secondary-container flex items-center justify-center text-xs">
+                        <i class="fa-solid fa-file-zipper"></i>
+                    </span>
+                    <span class="truncate font-bold">${file.name}</span>
+                    <span class="text-[11px] text-md-outline font-mono">(${formatBytes(file.size)})</span>
                 </div>
-                <button type="button" onclick="removeUploadFile(${index})" class="w-6 h-6 rounded-lg bg-slate-900 hover:bg-rose-950/60 hover:text-rose-400 text-slate-500 flex items-center justify-center transition-colors">
+                <button type="button" onclick="removeUploadFile(${index})" class="w-7 h-7 rounded-full hover:bg-md-error-container hover:text-md-error text-md-outline flex items-center justify-center transition-colors">
                     <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             `;
@@ -585,7 +618,7 @@
             dropzone.addEventListener(eventName, (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                dropzone.classList.add('border-indigo-500', 'bg-indigo-950/20', 'scale-[1.01]');
+                dropzone.classList.add('border-md-primary', 'bg-md-primary-container/20', 'scale-[1.01]');
             }, false);
         });
 
@@ -593,7 +626,7 @@
             dropzone.addEventListener(eventName, (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                dropzone.classList.remove('border-indigo-500', 'bg-indigo-950/20', 'scale-[1.01]');
+                dropzone.classList.remove('border-md-primary', 'bg-md-primary-container/20', 'scale-[1.01]');
             }, false);
         });
 
@@ -620,7 +653,7 @@
         if (progressBox) progressBox.classList.remove('hidden');
 
         submitBtn.disabled = true;
-        submitBtn.className = "px-5 py-2.5 bg-indigo-700/60 text-slate-400 text-sm font-semibold rounded-xl flex items-center space-x-2 cursor-not-allowed";
+        submitBtn.className = "px-6 py-3.5 bg-md-surface-container-lowest text-md-outline text-xs font-bold rounded-full flex items-center space-x-2 cursor-not-allowed";
         submitBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i><span>Распаковка и дедупликация...</span>';
     }
 </script>

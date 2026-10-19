@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="ru" class="dark h-full bg-slate-950 text-slate-100">
+<html lang="ru" class="dark h-full bg-[#111318] text-[#e2e2e9]">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{% block title %}Панель управления{% endblock %} — TG Shop Admin</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -12,14 +12,45 @@
             theme: {
                 extend: {
                     colors: {
-                        brand: {
-                            50: '#eef2ff',
-                            100: '#e0e7ff',
-                            500: '#6366f1',
-                            600: '#4f46e5',
-                            700: '#4338ca',
-                            900: '#312e81',
+                        md: {
+                            surface: '#111318',
+                            'surface-dim': '#111318',
+                            'surface-bright': '#37393e',
+                            'surface-container-lowest': '#0c0e13',
+                            'surface-container-low': '#191c20',
+                            'surface-container': '#1d2024',
+                            'surface-container-high': '#282a2f',
+                            'surface-container-highest': '#33353a',
+                            'on-surface': '#e2e2e9',
+                            'on-surface-variant': '#c4c6d0',
+                            outline: '#8e9099',
+                            'outline-variant': '#44474f',
+                            primary: '#d0bcff',
+                            'on-primary': '#381e72',
+                            'primary-container': '#4f378b',
+                            'on-primary-container': '#eaddff',
+                            secondary: '#ccc2dc',
+                            'on-secondary': '#332d41',
+                            'secondary-container': '#4a4458',
+                            'on-secondary-container': '#e8def8',
+                            tertiary: '#efb8c8',
+                            'on-tertiary': '#492532',
+                            'tertiary-container': '#633b48',
+                            'on-tertiary-container': '#ffd8e4',
+                            error: '#f2b8b5',
+                            'on-error': '#601410',
+                            'error-container': '#8c1d18',
+                            'on-error-container': '#f9dedc'
                         }
+                    },
+                    borderRadius: {
+                        'md-card': '28px',
+                        'md-dialog': '32px',
+                        'md-pill': '9999px'
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
                     }
                 }
             }
@@ -27,121 +58,122 @@
     </script>
     <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- Google Fonts Inter -->
+    <!-- Google Fonts Outfit & Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        /* Custom scrollbar for dark theme */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        body { font-family: 'Outfit', 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #111318; }
+        ::-webkit-scrollbar-thumb { background: #33353a; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #44474f; }
+        .m3-pressable { transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1), background-color 0.15s ease; }
+        .m3-pressable:active { transform: scale(0.97); }
     </style>
     {% block head %}{% endblock %}
 </head>
-<body class="h-full antialiased flex flex-col md:flex-row bg-slate-950 text-slate-100">
+<body class="h-full antialiased flex flex-col md:flex-row bg-md-surface text-md-on-surface selection:bg-md-primary selection:text-md-on-primary">
 
-    <!-- Mobile Top Bar -->
-    <div class="md:hidden flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800 z-30 sticky top-0">
-        <div class="flex items-center space-x-2">
-            <span class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+    <!-- Mobile Top App Bar -->
+    <div class="md:hidden flex items-center justify-between px-5 py-3.5 bg-md-surface-container border-b border-md-outline-variant/40 z-30 sticky top-0 backdrop-blur-md">
+        <div class="flex items-center space-x-2.5">
+            <span class="w-9 h-9 rounded-full bg-md-primary-container text-md-on-primary-container flex items-center justify-center text-sm shadow-md">
                 <i class="fa-solid fa-bolt"></i>
             </span>
-            <span class="font-bold text-lg text-white">TG Shop Admin</span>
+            <span class="font-extrabold text-base tracking-tight text-white">TG Shop MD3</span>
         </div>
-        <button id="mobile-menu-btn" class="p-2 text-slate-400 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <i class="fa-solid fa-bars text-xl"></i>
+        <button id="mobile-menu-btn" class="w-10 h-10 rounded-full bg-md-surface-container-high text-md-on-surface flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-md-primary transition-all">
+            <i class="fa-solid fa-bars text-base"></i>
         </button>
     </div>
 
-    <!-- Sidebar Overlay (Mobile) -->
-    <div id="sidebar-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 hidden md:hidden"></div>
+    <!-- Mobile Navigation Drawer Overlay -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 hidden md:hidden"></div>
 
-    <!-- Sidebar -->
-    <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800/80 flex flex-col transition-transform duration-200 ease-in-out -translate-x-full md:translate-x-0 md:static md:z-auto">
-        <!-- Logo Header -->
-        <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+    <!-- MD3 Expressive Navigation Rail (Sidebar) -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-72 bg-md-surface-container-low border-r border-md-outline-variant/30 flex flex-col transition-transform duration-300 ease-in-out -translate-x-full md:translate-x-0 md:static md:z-auto">
+        <!-- Logo / App Header -->
+        <div class="p-6 pb-4 flex items-center justify-between">
             <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
-                    <i class="fa-solid fa-shop"></i>
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-md-primary-container to-md-tertiary-container flex items-center justify-center text-md-on-primary-container shadow-md border border-md-outline-variant/30">
+                    <i class="fa-solid fa-shop text-lg"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-base tracking-wide text-white">TG Shop Panel</h1>
-                    <p class="text-xs text-slate-400">Inventory & Orders</p>
+                    <h1 class="font-black text-lg tracking-tight text-white">TG Shop</h1>
+                    <p class="text-[11px] font-medium text-md-primary uppercase tracking-wider">Expressive MD3</p>
                 </div>
             </div>
-            <button id="sidebar-close-btn" class="md:hidden text-slate-400 hover:text-white">
-                <i class="fa-solid fa-xmark text-lg"></i>
+            <button id="sidebar-close-btn" class="md:hidden w-8 h-8 rounded-full hover:bg-md-surface-container-highest text-md-on-surface-variant flex items-center justify-center">
+                <i class="fa-solid fa-xmark text-sm"></i>
             </button>
         </div>
 
-        <!-- Navigation Links -->
-        <nav class="flex-1 p-4 space-y-1.5 overflow-y-auto">
-            <a href="/" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all {% if active_tab == 'dashboard' %}bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/60{% endif %}">
+        <!-- Navigation Links (Pill active indicator) -->
+        <nav class="flex-1 px-4 py-3 space-y-1.5 overflow-y-auto">
+            <a href="/" class="flex items-center space-x-3.5 px-5 py-3 rounded-full font-semibold text-sm m3-pressable {% if active_tab == 'dashboard' %}bg-md-primary-container text-md-on-primary-container shadow-sm{% else %}text-md-on-surface-variant hover:text-white hover:bg-md-surface-container-high{% endif %}">
                 <i class="fa-solid fa-chart-pie w-5 text-center text-base"></i>
                 <span>Дашборд</span>
             </a>
 
-            <a href="/accounts" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all {% if active_tab == 'accounts' %}bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/60{% endif %}">
+            <a href="/accounts" class="flex items-center space-x-3.5 px-5 py-3 rounded-full font-semibold text-sm m3-pressable {% if active_tab == 'accounts' %}bg-md-primary-container text-md-on-primary-container shadow-sm{% else %}text-md-on-surface-variant hover:text-white hover:bg-md-surface-container-high{% endif %}">
                 <i class="fa-solid fa-boxes-stacked w-5 text-center text-base"></i>
                 <span>Аккаунты</span>
             </a>
 
-            <a href="/tickets" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all {% if active_tab == 'tickets' %}bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/60{% endif %}">
+            <a href="/tickets" class="flex items-center space-x-3.5 px-5 py-3 rounded-full font-semibold text-sm m3-pressable {% if active_tab == 'tickets' %}bg-md-primary-container text-md-on-primary-container shadow-sm{% else %}text-md-on-surface-variant hover:text-white hover:bg-md-surface-container-high{% endif %}">
                 <i class="fa-solid fa-ticket w-5 text-center text-base"></i>
                 <span>Тикеты</span>
             </a>
 
-            <a href="/products" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all {% if active_tab == 'products' %}bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/60{% endif %}">
+            <a href="/products" class="flex items-center space-x-3.5 px-5 py-3 rounded-full font-semibold text-sm m3-pressable {% if active_tab == 'products' %}bg-md-primary-container text-md-on-primary-container shadow-sm{% else %}text-md-on-surface-variant hover:text-white hover:bg-md-surface-container-high{% endif %}">
                 <i class="fa-solid fa-tags w-5 text-center text-base"></i>
                 <span>Товары и Категории</span>
             </a>
 
-            <a href="/orders" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all {% if active_tab == 'orders' %}bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/60{% endif %}">
+            <a href="/orders" class="flex items-center space-x-3.5 px-5 py-3 rounded-full font-semibold text-sm m3-pressable {% if active_tab == 'orders' %}bg-md-primary-container text-md-on-primary-container shadow-sm{% else %}text-md-on-surface-variant hover:text-white hover:bg-md-surface-container-high{% endif %}">
                 <i class="fa-solid fa-scale-balanced w-5 text-center text-base"></i>
                 <span>Заказы и Диспуты</span>
             </a>
 
-            <a href="/users" class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all {% if active_tab == 'users' %}bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800/60{% endif %}">
+            <a href="/users" class="flex items-center space-x-3.5 px-5 py-3 rounded-full font-semibold text-sm m3-pressable {% if active_tab == 'users' %}bg-md-primary-container text-md-on-primary-container shadow-sm{% else %}text-md-on-surface-variant hover:text-white hover:bg-md-surface-container-high{% endif %}">
                 <i class="fa-solid fa-users w-5 text-center text-base"></i>
                 <span>Пользователи</span>
             </a>
         </nav>
 
-        <!-- Admin Profile / Footer -->
-        <div class="p-4 border-t border-slate-800 bg-slate-900/60">
+        <!-- Admin Profile Pill -->
+        <div class="p-4 m-3 rounded-[24px] bg-md-surface-container border border-md-outline-variant/30">
             <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400 font-semibold text-xs">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-9 h-9 rounded-full bg-md-secondary-container text-md-on-secondary-container flex items-center justify-center font-bold text-xs">
                         <i class="fa-solid fa-user-shield"></i>
                     </div>
                     <div>
-                        <p class="text-xs font-semibold text-white truncate w-24">{{ admin }}</p>
-                        <p class="text-[10px] text-emerald-400 flex items-center">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1"></span> Online
+                        <p class="text-xs font-bold text-white truncate w-24">{{ admin }}</p>
+                        <p class="text-[10px] text-md-primary flex items-center font-medium">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1"></span> Админ
                         </p>
                     </div>
                 </div>
-                <a href="/logout" title="Выйти" class="p-2 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors">
-                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                <a href="/logout" title="Выйти" class="w-8 h-8 rounded-full hover:bg-md-surface-container-highest text-md-on-surface-variant hover:text-md-error flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
                 </a>
             </div>
         </div>
     </aside>
 
-    <!-- Main Content Area -->
-    <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <!-- Toast Flash Notification -->
+    <!-- Main Content Canvas -->
+    <main class="flex-1 flex flex-col min-w-0 overflow-y-auto pb-20 md:pb-6">
+        <!-- MD3 Snackbar Toast -->
         {% if msg %}
-        <div id="toast-banner" class="m-4 md:m-6 mb-0 p-4 rounded-xl border flex items-center justify-between shadow-xl transition-all duration-300 {% if msg_type == 'error' %}bg-rose-950/80 border-rose-800 text-rose-200{% elif msg_type == 'warning' %}bg-amber-950/80 border-amber-800 text-amber-200{% else %}bg-emerald-950/80 border-emerald-800 text-emerald-200{% endif %}">
+        <div id="toast-banner" class="m-4 md:m-6 mb-0 px-5 py-3.5 rounded-full border flex items-center justify-between shadow-2xl transition-all duration-300 {% if msg_type == 'error' %}bg-md-error-container border-md-error text-md-on-error-container{% elif msg_type == 'warning' %}bg-amber-950/90 border-amber-500/50 text-amber-200{% else %}bg-md-surface-container-highest border-md-outline-variant text-white{% endif %}">
             <div class="flex items-center space-x-3">
-                <i class="{% if msg_type == 'error' %}fa-solid fa-triangle-exclamation text-rose-400{% elif msg_type == 'warning' %}fa-solid fa-circle-exclamation text-amber-400{% else %}fa-solid fa-circle-check text-emerald-400{% endif %} text-lg"></i>
-                <span class="text-sm font-medium">{{ msg }}</span>
+                <i class="{% if msg_type == 'error' %}fa-solid fa-circle-exclamation text-md-error{% elif msg_type == 'warning' %}fa-solid fa-triangle-exclamation text-amber-400{% else %}fa-solid fa-circle-check text-md-primary{% endif %} text-base"></i>
+                <span class="text-xs md:text-sm font-medium">{{ msg }}</span>
             </div>
-            <button onclick="document.getElementById('toast-banner').remove()" class="text-slate-400 hover:text-white p-1">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="document.getElementById('toast-banner').remove()" class="w-7 h-7 rounded-full hover:bg-white/10 text-slate-300 flex items-center justify-center transition-colors ml-3">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
         {% endif %}
@@ -150,6 +182,26 @@
             {% block content %}{% endblock %}
         </div>
     </main>
+
+    <!-- Mobile Bottom Navigation Bar (MD3 Expressive for TWA / Smartphone) -->
+    <nav class="md:hidden fixed bottom-0 inset-x-0 bg-md-surface-container border-t border-md-outline-variant/30 flex items-center justify-around px-2 py-1.5 z-40 backdrop-blur-lg">
+        <a href="/" class="flex flex-col items-center py-1 px-3 rounded-full transition-all {% if active_tab == 'dashboard' %}text-md-on-primary-container bg-md-primary-container font-bold{% else %}text-md-on-surface-variant{% endif %}">
+            <i class="fa-solid fa-chart-pie text-sm"></i>
+            <span class="text-[10px] mt-0.5">Дашборд</span>
+        </a>
+        <a href="/accounts" class="flex flex-col items-center py-1 px-3 rounded-full transition-all {% if active_tab == 'accounts' %}text-md-on-primary-container bg-md-primary-container font-bold{% else %}text-md-on-surface-variant{% endif %}">
+            <i class="fa-solid fa-boxes-stacked text-sm"></i>
+            <span class="text-[10px] mt-0.5">Склад</span>
+        </a>
+        <a href="/orders" class="flex flex-col items-center py-1 px-3 rounded-full transition-all {% if active_tab == 'orders' %}text-md-on-primary-container bg-md-primary-container font-bold{% else %}text-md-on-surface-variant{% endif %}">
+            <i class="fa-solid fa-scale-balanced text-sm"></i>
+            <span class="text-[10px] mt-0.5">Заказы</span>
+        </a>
+        <a href="/tickets" class="flex flex-col items-center py-1 px-3 rounded-full transition-all {% if active_tab == 'tickets' %}text-md-on-primary-container bg-md-primary-container font-bold{% else %}text-md-on-surface-variant{% endif %}">
+            <i class="fa-solid fa-ticket text-sm"></i>
+            <span class="text-[10px] mt-0.5">Тикеты</span>
+        </a>
+    </nav>
 
     <!-- Sidebar Mobile Toggle Script -->
     <script>
@@ -184,7 +236,6 @@
                 document.body.classList.add('overflow-hidden');
             }
         }
-
         function closeModal(id) {
             const el = document.getElementById(id);
             if (el) {
@@ -192,25 +243,7 @@
                 document.body.classList.remove('overflow-hidden');
             }
         }
-
-        // Close on ESC and backdrop click
-        window.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                document.querySelectorAll('[id$="-modal"]').forEach(modal => {
-                    modal.classList.add('hidden');
-                });
-                document.body.classList.remove('overflow-hidden');
-            }
-        });
-
-        document.addEventListener('click', function(e) {
-            if (e.target.matches('[id$="-modal"]')) {
-                e.target.classList.add('hidden');
-                document.body.classList.remove('overflow-hidden');
-            }
-        });
     </script>
     {% block scripts %}{% endblock %}
-    {% block extra_scripts %}{% endblock %}
 </body>
 </html>
